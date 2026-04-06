@@ -1,8 +1,9 @@
 MAIN_TABLE = """
     CREATE TABLE IF NOT EXISTS main_stock_info(
         symbol TEXT PRIMARY KEY NOT NULL,
-        chain_id TEXT NOT NULL
-    )
+        id TEXT ,
+        chain_id TEXT
+    );
 """
 EXPIRATION_DATES_TABLE = """
     CREATE TABLE IF NOT EXISTS expiration_dates(
@@ -10,7 +11,7 @@ EXPIRATION_DATES_TABLE = """
         exp_date TEXT NOT NULL,
         PRIMARY KEY (symbol,exp_date),
         FOREIGN KEY (symbol) REFERENCES Main_Stock_Info(symbol)
-    )
+    );
 """
 OPTION_IDS_TABLE = """
     CREATE TABLE IF NOT EXISTS option_ids(
@@ -20,7 +21,7 @@ OPTION_IDS_TABLE = """
         option_type TEXT,
         symbol TEXT,
         FOREIGN KEY (symbol) REFERENCES Main_Stock_Info(symbol)
-    )
+    );
 """
 OPTION_GREEK_DATA_TABLE = """
     CREATE TABLE IF NOT EXISTS option_greek_data(
@@ -43,5 +44,23 @@ OPTION_GREEK_DATA_TABLE = """
         theta TEXT NOT NULL,
         vega TEXT NOT NULL,
         FOREIGN KEY (symbol) REFERENCES Main_Stock_Info(symbol)
-    )
+    );
+"""
+OPTION_EXPIRATION_SYNC_TABLE = """
+    CREATE TABLE IF NOT EXISTS option_expiration_sync(
+        symbol TEXT NOT NULL,
+        exp_date TEXT NOT NULL,
+        time_to_live INTEGER NOT NULL,
+        PRIMARY KEY (symbol, exp_date)
+    );
+"""
+OPTION_CHAIN_SYNC_TABLE = """
+    CREATE TABLE IF NOT EXISTS option_chain_sync(
+        symbol TEXT PRIMARY KEY NOT NULL,
+        time_to_live INTEGER NOT NULL
+    );
+"""
+OPTION_IDS_INDEX = """
+    CREATE INDEX IF NOT EXISTS idx_option_ids_lookup
+    ON option_ids(symbol, exp_date, option_type, strike_price);
 """

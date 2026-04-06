@@ -1,16 +1,18 @@
 from __future__ import annotations
+
+import json
 import re
-import requests
-import subprocess
 import sqlite3
+import subprocess
 import sys
 import time
-import snappy
-import json
-from .constants import API_ACCOUNT, ACCOUNT_NUMBER, RESULTS, PROJECT_DIR
 from dataclasses import dataclass
 from pathlib import Path
 
+import requests
+import snappy
+
+from .constants import ACCOUNT_NUMBER, API_ACCOUNT, PROJECT_DIR, RESULTS
 
 HOME_DIR = Path.home()
 FIRE_MAC = HOME_DIR / Path("Library/Application Support/Firefox/Profiles/")
@@ -26,6 +28,7 @@ CHROME_LINUX = HOME_DIR / Path(
     ".config/google-chrome/Default/Local Storage/leveldb"
 )
 DB_PATH = Path("storage/default/https+++robinhood.com/ls/data.sqlite")
+
 
 @dataclass(frozen=True)
 class Browser:
@@ -97,7 +100,7 @@ def _firefox_db_parse(f: Path) -> str | None:
                 blob = snappy.decompress(bearer_access_check[0])
                 if isinstance(blob, str):
                     return None
-                auth_dict: dict[str,str] = json.loads(blob.decode())
+                auth_dict: dict[str, str] = json.loads(blob.decode())
                 access_token = auth_dict.get("access_token")
                 return access_token
         except sqlite3.OperationalError:
@@ -126,6 +129,7 @@ def _chrome_db_parse(f: Path) -> str | None:
         except FileNotFoundError:
             return None
 
+
 # Add retry for 50X errors
 def _get_acc_id(bearer_token: str) -> str | int:
     headers = {"authorization": f"Bearer {bearer_token}"}
@@ -143,12 +147,13 @@ def get_token(
     browser: Browser = Firefox(),
     write_env: bool = True,
     open_browser: bool = True,
-) -> tuple[str,str]:
+) -> tuple[str, str]:
     """
     Browser should be whichever you are logged into robinhood.
-    Auto_open_browser will only run if get_acc_id returns 404
+    Auto_open_browser will only run if get_acc_id returns 403
+    Returns access_token and account_number
     """
-    bearer_token, account_number = None,None
+    bearer_token, account_number = None, None
     if sys.platform == "darwin":
         if isinstance(browser, Firefox):
             bearer_token = _firefox_db_parse(FIRE_MAC)
@@ -173,9 +178,9 @@ def get_token(
     """
 
     account_number = _get_acc_id(bearer_token)
-    if account_number == 404 and open_browser:
+    if account_number == 403 and open_browser:
         auto_open_browser(browser)
-        get_token(browser, write_env, (not open_browser))
+        return get_token(browser, write_env, (not open_browser))
 
     assert isinstance(account_number, str), "Unable to find account_number"
 

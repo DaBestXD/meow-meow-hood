@@ -1,3 +1,14 @@
+[project]
+name = "meow-meow-hood"
+version = "0.1.0"
+description = "A robinhood api wrapper for option data"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+  "python-dotenv>=1.2.2",
+  "python-snappy>=0.7.3",
+  "requests>=2.33.1",
+]
 [tool.ruff]
 line-length = 80
 
