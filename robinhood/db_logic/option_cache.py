@@ -96,6 +96,8 @@ class OptionCache:
         self.con.execute(query, args)
         query = "DELETE FROM option_ids WHERE exp_date < :today_et"
         self.con.execute(query, args)
+        query = "DELETE FROM option_expiration_sync WHERE exp_date < :today_et"
+        self.con.execute(query, args)
         self.con.commit()
 
     def is_option_chain_synced(self, symbol: str) -> bool:
@@ -170,6 +172,22 @@ class OptionCache:
         )
         cur = self.con.execute(query, args)
         return {option_request: [o[0] for o in cur.fetchall() if o]}
+
+    def fetch_strike_prices(self, option_request: OptionRequest) -> list[float]:
+        query = """
+            SELECT strike_price FROM option_ids
+            WHERE symbol = :symbol
+            AND exp_date = :exp_date
+            AND option_type = :option_type
+            ORDER BY strike_price
+        """
+        args = {
+            "symbol": option_request.symbol,
+            "exp_date": option_request.exp_date or "",
+            "option_type": option_request.option_type or "",
+        }
+        cur = self.con.execute(query, args)
+        return [row[0] for row in cur.fetchall()]
 
     def sync_option_request_full(
         self,

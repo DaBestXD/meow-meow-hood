@@ -61,9 +61,9 @@ class OptionRequest:
     """
 
     symbol: str
+    exp_date: str | None = None
     option_type: Literal["call", "put"] | None = None
     strike_price: float | None = None
-    exp_date: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

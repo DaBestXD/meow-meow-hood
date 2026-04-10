@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -12,7 +13,7 @@ from pathlib import Path
 import requests
 import snappy
 
-from .constants import ACCOUNT_NUMBER, API_ACCOUNT, PROJECT_DIR, RESULTS
+from .constants import ACCOUNT_NUMBER, API_ACCOUNT, RESULTS
 
 HOME_DIR = Path.home()
 FIRE_MAC = HOME_DIR / Path("Library/Application Support/Firefox/Profiles/")
@@ -51,7 +52,7 @@ class Firefox(Browser):
     windows: str = "firefox.exe"
 
 
-def auto_open_browser(browser: Browser, wait_time=5) -> None:
+def auto_open_browser(browser: Browser, wait_time: int = 10) -> None:
     """
     This function should only need to be run once a month.
     Opening the browser is necessary for freshing the bearer token.
@@ -61,7 +62,8 @@ def auto_open_browser(browser: Browser, wait_time=5) -> None:
     if sys.platform == "darwin":
         subprocess.Popen(["open", "-a", browser.mac, "https://robinhood.com"])
         time.sleep(wait_time)
-        # osascript is used instead of pkill to avoid high cpu usage from reportcrash
+        # osascript is used instead of pkill
+        # to avoid high cpu usage from reportcrash
         subprocess.run(
             ["osascript", "-e", f'tell application "{browser.mac}" to quit'],
             check=False,
@@ -119,8 +121,8 @@ def _chrome_db_parse(f: Path) -> str | None:
         if ".log" not in n.name:
             continue
         try:
-            with open(n, "rb") as l:
-                dump = l.read().decode(errors="ignore")
+            with open(n, "rb") as k:
+                dump = k.read().decode(errors="ignore")
                 token = re.search(
                     r'"access_token":"([^"]+)"',
                     dump,
@@ -131,7 +133,7 @@ def _chrome_db_parse(f: Path) -> str | None:
 
 
 # Add retry for 50X errors
-def _get_acc_id(bearer_token: str) -> str | int:
+def get_acc_id(bearer_token: str) -> str | int:
     headers = {"authorization": f"Bearer {bearer_token}"}
     r = requests.get(API_ACCOUNT, headers=headers)
     if r.status_code == 200:
@@ -144,6 +146,7 @@ def _get_acc_id(bearer_token: str) -> str | int:
 
 
 def get_token(
+    env_path: str | os.PathLike[str],
     browser: Browser = Firefox(),
     write_env: bool = True,
     open_browser: bool = True,
@@ -177,15 +180,15 @@ def get_token(
         on the selected browser.
     """
 
-    account_number = _get_acc_id(bearer_token)
+    account_number = get_acc_id(bearer_token)
     if account_number == 403 and open_browser:
         auto_open_browser(browser)
-        return get_token(browser, write_env, (not open_browser))
+        return get_token(env_path, browser, write_env, (not open_browser))
 
     assert isinstance(account_number, str), "Unable to find account_number"
 
     if write_env:
-        with open(PROJECT_DIR / ".env", "w") as f:
+        with open(env_path, "w") as f:
             f.write(f"BEARER_TOKEN={bearer_token}\n")
             f.write(f"ACCOUNT_NUMBER={account_number}")
 

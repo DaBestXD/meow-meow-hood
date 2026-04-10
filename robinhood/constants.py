@@ -27,7 +27,8 @@ PARAM_CHAIN_ID = "chain_id"
 PARAM_EXPIRATION_DATE = "expiration_dates"
 PARAM_LIMIT = "page_size"
 MAX_LIMIT = 100
-DEFAULT_DB_PATH = Path(__file__).resolve().parent / "robinhoodapi.db"
+DEFAULT_DB_PATH = Path("./").resolve().parent
+DEFAULT_ENV_PATH = Path("./").resolve().parent
 # Set of keys to extract from json payload
 STOCK_INFO_NON_FLOAT_KEYS = {
     "id",

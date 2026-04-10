@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections import defaultdict
+from enum import IntEnum
 from pathlib import Path
 from types import TracebackType
-from typing import Any
+from typing import Any, overload
 
 from dotenv import load_dotenv
 
@@ -19,7 +21,7 @@ from .api_dataclasses import (
     OptionRequest,
     StockInfo,
 )
-from .browser_token_parser import _get_acc_id, get_token
+from .browser_token_parser import get_acc_id, get_token
 from .constants import (
     API_INSTRUMENTS,
     API_OPTION_CHAINS,
@@ -27,6 +29,7 @@ from .constants import (
     API_OPTIONS_INSTRUMENTS,
     API_QUOTES,
     DEFAULT_DB_PATH,
+    DEFAULT_ENV_PATH,
     MAX_LIMIT,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
@@ -38,23 +41,29 @@ from .constants import (
     PARAM_OPTION_TYPE,
     PARAM_SYMBOLS,
     PARAM_TRADABLE_CHAIN_ID,
-    PROJECT_DIR,
 )
 from .option_matching import map_option_requests_to_ois, match_req_to_oi
+
+
+class LoggingLevel(IntEnum):
+    NONE = 0
+    DEBUG = 10
+    INFO = 20
 
 
 class Robinhood:
     def __init__(
         self,
         *,
-        env_path: str | os.PathLike[str] = PROJECT_DIR,
+        env_path: str | os.PathLike[str] = DEFAULT_ENV_PATH,
         auto_login: bool = True,
         open_browser: bool = False,
         user_agent: str | None = None,
-        cache: bool = True,
-        db_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
+        enable_cache: bool = True,
+        cache_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
         prune_expired_options: bool = True,
-        logging: bool = False,
+        logging_level: LoggingLevel = LoggingLevel.NONE,
+        access_token: str | None = None,
     ) -> None:
         """
         Initialize a Robinhood client instance.
@@ -79,22 +88,36 @@ class Robinhood:
             logging: Reserved flag for future request logging. It is currently
                 a no-op.
         """
-        env_path = Path(env_path)
-        db_path = Path(db_path)
-        load_dotenv(env_path / ".env")
-        token: str | None = os.getenv("BEARER_TOKEN")
+        env_path = Path(env_path).resolve() / ".env"
+        cache_path = Path(cache_path) / "meow-meow-hood.db"
+        load_dotenv(dotenv_path=env_path)
+        token = access_token if access_token else os.getenv("BEARER_TOKEN")
         self.user_id = -1
         if token:
-            self.user_id = _get_acc_id(token)
+            self.user_id = get_acc_id(token)
         if auto_login and isinstance(self.user_id, int):
-            token, self.user_id = get_token(open_browser=open_browser)
+            token, self.user_id = get_token(
+                env_path=env_path,
+                open_browser=open_browser,
+            )
         assert token, "Bearer token cannot be none."
-        if logging:
-            pass
-        self._http_client = RobinhoodHTTPClient(token, user_agent)
+        if logging_level != 0:
+            self._init_logger(logging_level)
+        else:
+            self.logger = None
+        self._http_client = RobinhoodHTTPClient(token, user_agent, self.logger)
         self._db_cache: OptionCache | None = None
-        if cache:
-            self._db_cache = OptionCache(db_path, prune_expired_options)
+        if enable_cache:
+            self._db_cache = OptionCache(cache_path, prune_expired_options)
+
+    def _init_logger(self, level: LoggingLevel) -> None:
+        logging.basicConfig(
+            level=level, format="[%(asctime)s] [%(levelname)s] %(message)s"
+        )
+        self.logger = logging.getLogger(self.__class__.__name__)
+        logging.getLogger("urllib3").propagate = False
+        logging.getLogger("urllib3.connectionpool").propagate = False
+        logging.getLogger("requests").propagate = False
 
     def __enter__(self) -> Robinhood:
         return self
@@ -120,8 +143,14 @@ class Robinhood:
         Returns option_expiration dates for a given symbol as
         a list of strings, date format in yyyy-mm-dd
         """
-        if self._db_cache:
+        if self._db_cache and self._db_cache.is_option_chain_synced:
             dates = self._db_cache.fetch_expiration_dates_for_symbol(symbol)
+            if self.logger:
+                self.logger.debug(
+                    "%s cache hit for %s",
+                    self.get_expiration_dates.__name__,
+                    symbol,
+                )
             if dates:
                 return dates
         res_json = self._http_client._get(API_OPTION_CHAINS + f"{symbol}/")
@@ -144,26 +173,40 @@ class Robinhood:
         Usage get_strike_prices("SPY","2026-04-20")
         Returns a dict of OptionRequest and a list of strike prices
         """
+        base_request = OptionRequest(symbol=symbol, exp_date=exp_date)
+        call_request = OptionRequest(
+            symbol=symbol, option_type="call", exp_date=exp_date
+        )
+        put_request = OptionRequest(
+            symbol=symbol, option_type="put", exp_date=exp_date
+        )
+        if self._db_cache and self._db_cache.is_option_request_synced(
+            base_request
+        ):
+            if self.logger:
+                self.logger.debug(
+                    "%s cache hit for %s",
+                    self.get_strike_prices.__name__,
+                    symbol,
+                )
+            return {
+                call_request: self._db_cache.fetch_strike_prices(call_request),
+                put_request: self._db_cache.fetch_strike_prices(put_request),
+            }
         chain = self._db_cache.get_chain_id(symbol) if self._db_cache else None
         if not chain:
             chain = self.get_option_chain_data(symbol)
             if chain:
-                chain = chain[0].id
-        call_req = OptionRequest(
-            symbol=symbol, option_type="call", exp_date=exp_date
-        )
-        put_req = OptionRequest(
-            symbol=symbol, option_type="put", exp_date=exp_date
-        )
+                chain = chain.id
         if not chain:
-            return {call_req: [], put_req: []}
+            return {call_request: [], put_request: []}
         params = {
             PARAM_CHAIN_ID: chain,
             PARAM_EXPIRATION_DATE: exp_date,
             PARAM_OPTION_STATE: "active",
         }
         options = self._http_client._get(API_OPTIONS_INSTRUMENTS, params)
-        oi_list = [OptionInstrument.from_json(o) for o in options]
+        oi_list = [OptionInstrument.from_json(o) for o in options if o]
         if self._db_cache:
             self._db_cache.insert_option_instrument(oi_list)
             dates = {oi.expiration_date for oi in oi_list}
@@ -178,9 +221,17 @@ class Robinhood:
                 call_strikes.append(o.strike_price)
             elif o.type == "put":
                 put_strikes.append(o.strike_price)
-        return {call_req: call_strikes, put_req: put_strikes}
+        return {call_request: call_strikes, put_request: put_strikes}
 
-    def get_stock_info(self, symbols: str | list[str]) -> list[StockInfo]:
+    @overload
+    def get_stock_info(self, symbols: str) -> StockInfo | None: ...
+
+    @overload
+    def get_stock_info(self, symbols: list[str]) -> list[StockInfo] | None: ...
+
+    def get_stock_info(
+        self, symbols: str | list[str]
+    ) -> StockInfo | list[StockInfo] | None:
         if isinstance(symbols, str):
             joined_symbols = symbols
         else:
@@ -189,14 +240,24 @@ class Robinhood:
             API_INSTRUMENTS, {PARAM_SYMBOLS: joined_symbols}
         )
         if not res_json:
-            return []
+            return None
         stock_info_list = [StockInfo.from_json(r) for r in res_json]
         if self._db_cache:
             for s in stock_info_list:
                 self._db_cache.insert_stock_info(s)
-        return stock_info_list
+        return (
+            stock_info_list if len(stock_info_list) > 1 else stock_info_list[0]
+        )
 
-    def get_stock_quotes(self, symbol: list[str] | str) -> list[FullQuote]:
+    @overload
+    def get_stock_quotes(self, symbol: str) -> FullQuote: ...
+
+    @overload
+    def get_stock_quotes(self, symbol: list[str]) -> list[FullQuote]: ...
+
+    def get_stock_quotes(
+        self, symbol: list[str] | str
+    ) -> FullQuote | list[FullQuote]:
         """
         Returns a list of FullQuote dataclasses
         Usage: stock = get_stock_quotes("SPY")
@@ -206,20 +267,21 @@ class Robinhood:
         res_json = self._http_client._get(
             endpoint=API_QUOTES, params={PARAM_SYMBOLS: joined_symbol}
         )
+        return_val = [FullQuote.from_json(r) for r in res_json if r]
         if not res_json:
             return []
-        return [FullQuote.from_json(r) for r in res_json if r]
+        return return_val if len(return_val) > 1 else return_val[0]
 
     def _resolve_option_greeks_from_ids(
         self,
         option_requests: list[OptionRequest],
-        req_to_ids: dict[OptionRequest, list[str]],
+        requests_to_ids: dict[OptionRequest, list[str]],
         limit: int = MAX_LIMIT,
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         seen_ids: set[str] = set()
         all_op_ids: list[str] = []
         for request in option_requests:
-            for option_id in req_to_ids.get(request, []):
+            for option_id in requests_to_ids.get(request, []):
                 if option_id in seen_ids:
                     continue
                 seen_ids.add(option_id)
@@ -233,13 +295,13 @@ class Robinhood:
         return {
             request: [
                 greeks_by_id[option_id]
-                for option_id in req_to_ids.get(request, [])
+                for option_id in requests_to_ids.get(request, [])
                 if option_id in greeks_by_id
             ]
             for request in option_requests
         }
 
-    def live_option_request(
+    def no_db_option_greeks_batch_request(
         self,
         option_requests: list[OptionRequest],
         limit: int = MAX_LIMIT,
@@ -249,11 +311,19 @@ class Robinhood:
         and routes through the normal api path of:
         Option Chain Data --> Option Instrument Data --> Option Greek Data
         """
-        chains = self.get_option_chain_data([o.symbol for o in option_requests])
+        if len(option_requests) == 1:
+            chains = self.get_option_chain_data(option_requests[0].symbol)
+        else:
+            chains = self.get_option_chain_data(
+                [o.symbol for o in option_requests]
+            )
         if not chains:
             print("No chains for any option request")
             return {o: [] for o in option_requests}
-        chain_symbol_pair = {c.symbol: c.id for c in chains}
+        if isinstance(chains, OptionChain):
+            chain_symbol_pair = {chains.symbol: chains.id}
+        else:
+            chain_symbol_pair = {c.symbol: c.id for c in chains}
         opt_instruments = self._get_oi_helper(
             option_requests, chain_symbol_pair, limit
         )
@@ -303,9 +373,17 @@ class Robinhood:
                 self._db_cache.sync_option_request_dispatch(k, v)
         return return_val
 
+    @overload
+    def get_option_chain_data(self, symbol: str) -> OptionChain | None: ...
+
+    @overload
+    def get_option_chain_data(
+        self, symbol: list[str]
+    ) -> list[OptionChain] | None: ...
+
     def get_option_chain_data(
         self, symbol: str | list[str]
-    ) -> list[OptionChain]:
+    ) -> list[OptionChain] | OptionChain | None:
         if isinstance(symbol, str):
             res_json = self._http_client._get(API_OPTION_CHAINS + f"{symbol}/")
         else:
@@ -313,24 +391,24 @@ class Robinhood:
                 API_INSTRUMENTS, {PARAM_SYMBOLS: ",".join(symbol)}
             )
             if not chain_rows:
-                return []
+                return None
             chain_ids = [
                 chain_id
                 for c in chain_rows
                 if (chain_id := c.get(PARAM_TRADABLE_CHAIN_ID))
             ]
             if not chain_ids:
-                return []
+                return None
             res_json = self._http_client._get(
                 API_OPTION_CHAINS, {PARAM_ID: ",".join(chain_ids)}
             )
         if not res_json:
-            return []
+            return None
         return_val = [OptionChain.from_json(r) for r in res_json if r]
         if self._db_cache:
             for c in return_val:
                 self._db_cache.insert_option_chain(c)
-        return return_val
+        return return_val if len(return_val) > 1 else return_val[0]
 
     def _get_option_greek_data(
         self, option_ids: list[str], limit: int = MAX_LIMIT
@@ -360,7 +438,9 @@ class Robinhood:
         if isinstance(option_requests, OptionRequest):
             option_requests = [option_requests]
         if not self._db_cache:
-            return self.live_option_request(option_requests, limit)
+            return self.no_db_option_greeks_batch_request(
+                option_requests, limit
+            )
 
         cached_requests: list[OptionRequest] = []
         req_to_ids: dict[OptionRequest, list[str]] = {}
@@ -376,6 +456,6 @@ class Robinhood:
         )
         if missed_cache_hits:
             return_val.update(
-                self.live_option_request(missed_cache_hits, limit)
+                self.no_db_option_greeks_batch_request(missed_cache_hits, limit)
             )
         return return_val
