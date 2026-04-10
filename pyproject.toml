@@ -9,6 +9,22 @@ dependencies = [
   "python-snappy>=0.7.3",
   "requests>=2.33.1",
 ]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Trent Lee" }]
+
+[project.urls]
+Homepage = "https://github.com/DaBestXD/meow-meow-hood"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["robinhood*"]
+namespaces = false
+
 [tool.ruff]
 line-length = 80
 

@@ -6,9 +6,10 @@ A Robinhood API wrapper for fast option market data
 
 ## Why?
 
-If you're using Robinhood as a broker still...
+If you're using Robinhood as a broker still...\
+And if you want to view option market data at a reasonable speed.
 
-## AUTH
+## Authentication
 
 Ensure you are logged in locally to Robinhood on either:
 
@@ -28,13 +29,26 @@ Robinhood(auto_login=False, access_token="...")
 
 JSON responses are returned as named data classes for easier parsing.\
 Examples: `FullQuote`, `OptionInstrument`, `OptionGreekData`, etc.\
-(*Refer to the `robinhood/api_dataclasses.py` file for more information.*)\
+
+```python
+@dataclass(frozen=True, slots=True)
+class FullQuote(ApiPayloadMixin):
+    ask_price: float
+    ask_size: int
+    bid_price: float
+    bid_size: int
+    ...
+```
+
+(*Refer to the [robinhood/api_dataclasses.py](robinhood/api_dataclasses.py)
+for full implementation details.*)\
+
 `OptionRequest` is the main class when requesting option data.
 
 ```python
 OptionRequest(
-    symbol:str,
-    exp_date:str | None = None,
+    symbol: str,
+    exp_date: str | None = None,
     option_type: Literal['call', 'put'] | None = None,
     strike_price: float | None = None
 )
@@ -46,11 +60,8 @@ Example:
 # With context manager
 with Robinhood() as rh:
   spy_dates: list[str] = rh.get_expiration_dates("SPY")
-  # Dates are in string format as yyyy-mm-dd
   spy_request1 = OptionRequest(symbol="SPY", exp_date=spy_dates[0])
-  # Returns all options for the given expiration date for SPY
   spy_option_data = rh.get_option_greeks_batch_request(spy_request1)
-  # Each option request is mapped to a list of OptionGreekData classes
   for option_request, options in spy_option_data.items():
     print(option_request, len(options))
 
@@ -65,6 +76,6 @@ rh.close()
 
 ## Local caching
 
-This library uses a local Sqlite database to cache option
-instruments and reduce the amount of requests made per call.
-Cache is validated with a TTL of the next trading day open(9:30 EDT)
+This library uses a local SQLite database to cache option
+instruments and reduce the amount of requests made per call.\
+Cache is validated with a TTL of the next day at 9:30 EDT

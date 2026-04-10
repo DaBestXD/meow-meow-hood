@@ -34,3 +34,6 @@ __all__ = [
     "FullQuote",
     "StockInfo",
 ]
+
+
+__version__ = "0.1.0"
