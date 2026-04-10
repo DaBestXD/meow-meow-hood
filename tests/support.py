@@ -1,4 +1,13 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+from unittest.mock import Mock
+
 from robinhood.api_dataclasses import OptionGreekData, OptionInstrument
+
+if TYPE_CHECKING:
+    from robinhood._http_client import RobinhoodHTTPClient
+    from robinhood.robinhood_api_logic import Robinhood
 
 
 def build_option_instrument(
@@ -74,3 +83,115 @@ def build_option_greek_data(
         low_fill_rate_buy_price=0.98,
         low_fill_rate_sell_price=0.96,
     )
+
+
+def build_option_chain_payload(
+    *,
+    id: str = "chain-id",
+    symbol: str = "SPY",
+    expiration_dates: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "symbol": symbol,
+        "can_open_position": True,
+        "cash_component": None,
+        "expiration_dates": expiration_dates or ["2026-04-17", "2026-04-24"],
+        "trade_value_multiplier": "100.0",
+        "underlying_instruments": [
+            {
+                "id": "stock-id",
+                "instrument": f"https://api.robinhood.com/instruments/{symbol}/",
+            }
+        ],
+        "min_ticks": {
+            "cutoff_price": 3.0,
+            "below_tick": 0.01,
+            "above_tick": 0.05,
+        },
+        "min_ticks_multileg": {
+            "cutoff_price": 3.0,
+            "below_tick": 0.01,
+            "above_tick": 0.05,
+        },
+        "late_close_state": "regular_hours",
+        "extended_hours_state": "closed",
+        "underlyings": [{"symbol": symbol, "quantity": 100}],
+        "settle_on_open": False,
+        "sellout_time_to_expiration": 3600,
+    }
+
+
+def build_full_quote_payload(
+    *,
+    symbol: str = "SPY",
+    instrument_id: str = "instrument-id",
+) -> dict[str, object]:
+    return {
+        "ask_price": "10.5",
+        "ask_size": "11",
+        "bid_price": "10.4",
+        "bid_size": "9",
+        "last_trade_price": "10.45",
+        "last_extended_hours_trade_price": "10.3",
+        "last_non_reg_trade_price": "10.35",
+        "previous_close": "10.0",
+        "adjusted_previous_close": "10.1",
+        "symbol": symbol,
+        "updated_at": "2026-04-01T09:30:00Z",
+        "instrument_id": instrument_id,
+        "state": "active",
+    }
+
+
+def build_stock_info_payload(
+    *,
+    id: str = "stock-id",
+    symbol: str = "SPY",
+    tradable_chain_id: str = "chain-id",
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "url": f"https://api.robinhood.com/instruments/{id}/",
+        "quote": f"https://api.robinhood.com/quotes/{symbol}/",
+        "fundamentals": (
+            f"https://api.robinhood.com/fundamentals/{symbol}/"
+        ),
+        "market": "XNYS",
+        "name": f"{symbol} Test Instrument",
+        "tradeable": True,
+        "symbol": symbol,
+        "country": "US",
+        "type": "etp",
+        "tradable_chain_id": tradable_chain_id,
+        "short_selling_tradability": "tradeable",
+        "margin_initial_ratio": "0.50",
+        "maintenance_ratio": "0.25",
+        "day_trade_ratio": "0.25",
+        "min_tick_size": "0.01",
+    }
+
+
+def build_robinhood_client(
+    *,
+    http_client: object | None = None,
+    db_cache: object | None = None,
+) -> Robinhood:
+    from robinhood.robinhood_api_logic import Robinhood
+
+    client = Robinhood.__new__(Robinhood)
+    client._http_client = http_client if http_client is not None else Mock()
+    client._db_cache = db_cache
+    client.logger = None
+    return client
+
+
+def build_http_client(
+    *, session: object | None = None
+) -> RobinhoodHTTPClient:
+    from robinhood._http_client import RobinhoodHTTPClient
+
+    client = RobinhoodHTTPClient.__new__(RobinhoodHTTPClient)
+    client.session = session if session is not None else Mock()
+    client.logger = None
+    return client

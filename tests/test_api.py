@@ -1,10 +1,14 @@
-from dataclasses import asdict
 import unittest
+from dataclasses import asdict
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import ANY, Mock, call, patch
 
-from robinhood.api_dataclasses import OptionRequest
+from robinhood.api_dataclasses import (
+    FullQuote,
+    OptionChain,
+    OptionRequest,
+    StockInfo,
+)
 from robinhood.constants import (
     API_INSTRUMENTS,
     API_OPTION_CHAINS,
@@ -13,6 +17,7 @@ from robinhood.constants import (
     MAX_LIMIT,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
+    PARAM_ID,
     PARAM_LIMIT,
     PARAM_OPTION_STATE,
     PARAM_OPTION_STRIKE_PRICE,
@@ -20,7 +25,14 @@ from robinhood.constants import (
     PARAM_SYMBOLS,
 )
 from robinhood.robinhood_api_logic import Robinhood
-from tests.support import build_option_greek_data, build_option_instrument
+from tests.support import (
+    build_full_quote_payload,
+    build_option_chain_payload,
+    build_option_greek_data,
+    build_option_instrument,
+    build_robinhood_client,
+    build_stock_info_payload,
+)
 
 
 class FakeCache:
@@ -42,16 +54,10 @@ class FakeCache:
 
 
 class TestRobinhoodOptionFlow(unittest.TestCase):
-    def make_client(self) -> Robinhood:
-        client = Robinhood.__new__(Robinhood)
-        client._db_cache = None
-        client._http_client = Mock()
-        return client
-
     @patch("robinhood.robinhood_api_logic.OptionCache")
     @patch("robinhood.robinhood_api_logic.RobinhoodHTTPClient")
     @patch("robinhood.robinhood_api_logic.get_token")
-    @patch("robinhood.robinhood_api_logic._get_acc_id")
+    @patch("robinhood.robinhood_api_logic.get_acc_id")
     @patch("robinhood.robinhood_api_logic.os.getenv")
     @patch("robinhood.robinhood_api_logic.load_dotenv")
     def test_init_uses_env_token_without_refreshing(
@@ -68,15 +74,16 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
 
         client = Robinhood(
             auto_login=True,
-            cache=True,
-            db_path="/tmp/test-cache.db",
+            enable_cache=True,
+            cache_path="/tmp/test-cache.db",
         )
 
-        mock_load_dotenv.assert_called_once()
+        mock_load_dotenv.assert_called_once_with(dotenv_path=ANY)
+        mock_get_acc_id.assert_called_once_with("env-token")
         mock_get_token.assert_not_called()
-        mock_http_client_cls.assert_called_once_with("env-token", None)
+        mock_http_client_cls.assert_called_once_with("env-token", None, None)
         mock_option_cache_cls.assert_called_once_with(
-            Path("/tmp/test-cache.db"),
+            Path("/tmp/test-cache.db") / "meow-meow-hood.db",
             True,
         )
         client.close()
@@ -84,12 +91,12 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
     @patch("robinhood.robinhood_api_logic.OptionCache")
     @patch("robinhood.robinhood_api_logic.RobinhoodHTTPClient")
     @patch("robinhood.robinhood_api_logic.get_token")
-    @patch("robinhood.robinhood_api_logic._get_acc_id")
+    @patch("robinhood.robinhood_api_logic.get_acc_id")
     @patch("robinhood.robinhood_api_logic.os.getenv")
     @patch("robinhood.robinhood_api_logic.load_dotenv")
     def test_init_refreshes_token_when_env_token_is_rejected(
         self,
-        _mock_load_dotenv,
+        mock_load_dotenv,
         mock_getenv,
         mock_get_acc_id,
         mock_get_token,
@@ -100,25 +107,38 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_acc_id.return_value = 403
         mock_get_token.return_value = ("fresh-token", "ACC123")
 
-        client = Robinhood(auto_login=True, cache=False)
+        client = Robinhood(auto_login=True, enable_cache=False)
 
-        mock_get_token.assert_called_once_with(open_browser=False)
-        mock_http_client_cls.assert_called_once_with("fresh-token", None)
+        mock_load_dotenv.assert_called_once_with(dotenv_path=ANY)
+        mock_get_acc_id.assert_called_once_with("stale-token")
+        mock_get_token.assert_called_once_with(
+            env_path=ANY,
+            open_browser=False,
+        )
+        self.assertEqual(
+            ".env",
+            mock_get_token.call_args.kwargs["env_path"].name,
+        )
+        mock_http_client_cls.assert_called_once_with("fresh-token", None, None)
         mock_option_cache_cls.assert_not_called()
         client.close()
 
     def test_close_closes_cache_and_http_client(self):
-        client = self.make_client()
-        client._db_cache = Mock()
-        client._http_client = Mock()
+        http_client = Mock()
+        db_cache = Mock()
+        client = build_robinhood_client(
+            http_client=http_client,
+            db_cache=db_cache,
+        )
 
         client.close()
 
-        client._http_client.close.assert_called_once_with()
+        http_client.close.assert_called_once_with()
+        db_cache.close.assert_called_once_with()
         self.assertIsNone(client._db_cache)
 
     def test_resolve_option_greeks_from_ids_chunks_dedupes_and_rebuilds(self):
-        client = self.make_client()
+        client = build_robinhood_client()
         req1 = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         req2 = OptionRequest(symbol="SPY", exp_date="2026-04-24")
         req3 = OptionRequest(symbol="QQQ", exp_date="2026-04-17")
@@ -158,7 +178,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         self.assertEqual([], result[req3])
 
     def test_live_option_request_maps_instruments_back_to_requests(self):
-        client = self.make_client()
+        client = build_robinhood_client()
         req_all = OptionRequest(symbol="SPY")
         req_call = OptionRequest(
             symbol="SPY", option_type="call", exp_date="2026-04-17"
@@ -175,9 +195,10 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             expiration_date="2026-04-17",
             type="put",
         )
-        client.get_option_chain_data = Mock(
-            return_value=[SimpleNamespace(symbol="SPY", id="chain-id")]
+        chain = OptionChain.from_json(
+            build_option_chain_payload(id="chain-id", symbol="SPY")
         )
+        client.get_option_chain_data = Mock(return_value=[chain])
         client._get_oi_helper = Mock(return_value=[inst_call, inst_put])
         client._resolve_option_greeks_from_ids = Mock(
             return_value={req_all: [], req_call: []}
@@ -198,7 +219,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         )
 
     def test_get_option_greeks_batch_request_normalizes_single_request(self):
-        client = self.make_client()
+        client = build_robinhood_client()
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         expected = {request: [build_option_greek_data(instrument_id="id1")]}
         client.no_db_option_greeks_batch_request = Mock(return_value=expected)
@@ -211,18 +232,15 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         )
 
     def test_get_strike_prices_returns_empty_lists_for_empty_results(self):
-        client = self.make_client()
+        client = build_robinhood_client()
         client.get_option_chain_data = Mock(
-            return_value=[SimpleNamespace(id="chain-id")]
+            return_value=OptionChain.from_json(
+                build_option_chain_payload(id="chain-id", symbol="SPY")
+            )
         )
         client._http_client._get.return_value = []
 
-        with patch(
-            "robinhood.robinhood_api_logic.OptionInstrument.from_json"
-        ) as mock_from_json:
-            result = client.get_strike_prices(
-                symbol="SPY", exp_date="2026-04-06"
-            )
+        result = client.get_strike_prices(symbol="SPY", exp_date="2026-04-06")
 
         self.assertEqual(
             {
@@ -239,7 +257,6 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             },
             result,
         )
-        mock_from_json.assert_not_called()
         client._http_client._get.assert_called_once_with(
             API_OPTIONS_INSTRUMENTS,
             {
@@ -250,9 +267,11 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         )
 
     def test_get_strike_prices_parses_valid_option_instrument_payloads(self):
-        client = self.make_client()
+        client = build_robinhood_client()
         client.get_option_chain_data = Mock(
-            return_value=[SimpleNamespace(id="chain-id")]
+            return_value=OptionChain.from_json(
+                build_option_chain_payload(id="chain-id", symbol="SPY")
+            )
         )
         call_payload = asdict(
             build_option_instrument(
@@ -291,13 +310,13 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         )
 
     def test_get_strike_prices_returns_cached_strikes_without_http(self):
-        client = self.make_client()
-        client._db_cache = Mock()
-        client._db_cache.is_option_request_synced.return_value = True
-        client._db_cache.fetch_strike_prices.side_effect = [
+        db_cache = Mock()
+        db_cache.is_option_request_synced.return_value = True
+        db_cache.fetch_strike_prices.side_effect = [
             [495.0, 500.0],
             [490.0],
         ]
+        client = build_robinhood_client(db_cache=db_cache)
 
         result = client.get_strike_prices(symbol="SPY", exp_date="2026-04-07")
 
@@ -316,7 +335,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             },
             result,
         )
-        client._db_cache.is_option_request_synced.assert_called_once_with(
+        db_cache.is_option_request_synced.assert_called_once_with(
             OptionRequest(symbol="SPY", exp_date="2026-04-07")
         )
         self.assertEqual(
@@ -336,18 +355,26 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
                     )
                 ),
             ],
-            client._db_cache.fetch_strike_prices.call_args_list,
+            db_cache.fetch_strike_prices.call_args_list,
         )
         client._http_client._get.assert_not_called()
 
     def test_get_option_greeks_batch_request_merges_cache_hits_and_misses(self):
-        client = self.make_client()
+        client = build_robinhood_client(
+            db_cache=FakeCache(
+                synced_requests={
+                    OptionRequest(symbol="SPY", exp_date="2026-04-17")
+                },
+                ids_by_request={
+                    OptionRequest(
+                        symbol="SPY",
+                        exp_date="2026-04-17",
+                    ): ["cached-1", "cached-2"]
+                },
+            )
+        )
         cached_request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         missed_request = OptionRequest(symbol="QQQ", exp_date="2026-04-17")
-        client._db_cache = FakeCache(
-            synced_requests={cached_request},
-            ids_by_request={cached_request: ["cached-1", "cached-2"]},
-        )
         cached_result = {
             cached_request: [
                 build_option_greek_data(instrument_id="cached-1"),
@@ -386,11 +413,11 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         )
 
     def test_get_expiration_dates_returns_cached_dates_without_http(self):
-        client = self.make_client()
-        client._db_cache = Mock()
-        client._db_cache.fetch_expiration_dates_for_symbol.return_value = [
+        db_cache = Mock()
+        db_cache.fetch_expiration_dates_for_symbol.return_value = [
             "2026-04-17"
         ]
+        client = build_robinhood_client(db_cache=db_cache)
 
         result = client.get_expiration_dates("SPY")
 
@@ -398,72 +425,63 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client._http_client._get.assert_not_called()
 
     def test_get_expiration_dates_fetches_and_syncs_cache_on_miss(self):
-        client = self.make_client()
-        client._db_cache = Mock()
-        client._db_cache.fetch_expiration_dates_for_symbol.return_value = []
-        client._http_client._get.return_value = [{"payload": "ignored"}]
-        chain = SimpleNamespace(
+        db_cache = Mock()
+        db_cache.fetch_expiration_dates_for_symbol.return_value = []
+        client = build_robinhood_client(db_cache=db_cache)
+        chain_payload = build_option_chain_payload(
             symbol="SPY",
             expiration_dates=["2026-04-17", "2026-04-24"],
         )
+        expected_chain = OptionChain.from_json(chain_payload)
+        client._http_client._get.return_value = [chain_payload]
 
-        with patch(
-            "robinhood.robinhood_api_logic.OptionChain.from_json",
-            return_value=chain,
-        ):
-            result = client.get_expiration_dates("SPY")
+        result = client.get_expiration_dates("SPY")
 
         self.assertEqual(["2026-04-17", "2026-04-24"], result)
         client._http_client._get.assert_called_once_with(
             API_OPTION_CHAINS + "SPY/"
         )
-        client._db_cache.insert_option_chain.assert_called_once_with(chain)
-        client._db_cache.sync_option_chain.assert_called_once_with("SPY")
+        db_cache.insert_option_chain.assert_called_once_with(expected_chain)
+        db_cache.sync_option_chain.assert_called_once_with("SPY")
 
     def test_get_stock_quotes_normalizes_single_symbol(self):
-        client = self.make_client()
-        client._http_client._get.return_value = [{"payload": "ignored"}]
-        quote = SimpleNamespace(symbol="SPY")
+        client = build_robinhood_client()
+        quote_payload = build_full_quote_payload(symbol="SPY")
+        client._http_client._get.return_value = [quote_payload]
 
-        with patch(
-            "robinhood.robinhood_api_logic.FullQuote.from_json",
-            return_value=quote,
-        ):
-            result = client.get_stock_quotes("SPY")
+        result = client.get_stock_quotes("SPY")
 
-        self.assertEqual([quote], result)
+        self.assertEqual(FullQuote.from_json(quote_payload), result)
         client._http_client._get.assert_called_once_with(
             endpoint=API_QUOTES,
             params={PARAM_SYMBOLS: "SPY"},
         )
 
     def test_get_stock_info_inserts_rows_into_cache(self):
-        client = self.make_client()
-        client._db_cache = Mock()
-        client._http_client._get.return_value = [{"payload": "ignored"}]
-        stock_info = SimpleNamespace(
+        db_cache = Mock()
+        client = build_robinhood_client(db_cache=db_cache)
+        stock_info_payload = build_stock_info_payload(
             symbol="SPY",
             id="stock-id",
             tradable_chain_id="chain-id",
         )
+        expected_stock_info = StockInfo.from_json(stock_info_payload)
+        client._http_client._get.return_value = [stock_info_payload]
 
-        with patch(
-            "robinhood.robinhood_api_logic.StockInfo.from_json",
-            return_value=stock_info,
-        ):
-            result = client.get_stock_info(["SPY", "QQQ"])
+        result = client.get_stock_info(["SPY", "QQQ"])
 
-        self.assertEqual([stock_info], result)
+        self.assertEqual(expected_stock_info, result)
         client._http_client._get.assert_called_once_with(
             API_INSTRUMENTS,
             {PARAM_SYMBOLS: "SPY,QQQ"},
         )
-        client._db_cache.insert_stock_info.assert_called_once_with(stock_info)
+        db_cache.insert_stock_info.assert_called_once_with(
+            expected_stock_info
+        )
 
     def test_get_oi_helper_clamps_limit_and_syncs_cache_mappings(self):
-        client = self.make_client()
-        client._db_cache = Mock()
-        client._http_client._get.return_value = [{"payload": "ignored"}]
+        db_cache = Mock()
+        client = build_robinhood_client(db_cache=db_cache)
         option_request = OptionRequest(
             symbol="SPY",
             exp_date="2026-04-17",
@@ -477,22 +495,14 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             type="call",
             strike_price=500.0,
         )
+        option_payload = asdict(option_instrument)
+        client._http_client._get.return_value = [option_payload]
 
-        with (
-            patch(
-                "robinhood.robinhood_api_logic.OptionInstrument.from_json",
-                return_value=option_instrument,
-            ),
-            patch(
-                "robinhood.robinhood_api_logic.map_option_requests_to_ois",
-                return_value={option_request: [option_instrument]},
-            ),
-        ):
-            result = client._get_oi_helper(
-                [option_request],
-                {"SPY": "chain-id"},
-                limit=MAX_LIMIT + 50,
-            )
+        result = client._get_oi_helper(
+            [option_request],
+            {"SPY": "chain-id"},
+            limit=MAX_LIMIT + 50,
+        )
 
         self.assertEqual([option_instrument], result)
         client._http_client._get.assert_called_once_with(
@@ -506,33 +516,32 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
                 PARAM_OPTION_STRIKE_PRICE: 500.0,
             },
         )
-        client._db_cache.sync_option_request_dispatch.assert_called_once_with(
+        db_cache.insert_option_instrument.assert_called_once_with(
+            [option_instrument]
+        )
+        db_cache.sync_option_request_dispatch.assert_called_once_with(
             option_request,
             [option_instrument],
         )
 
     def test_get_option_chain_data_skips_symbols_without_chain_ids(self):
-        client = self.make_client()
+        client = build_robinhood_client()
+        chain_payload = build_option_chain_payload(id="chain-id", symbol="SPY")
         client._http_client._get.side_effect = [
             [
                 {"tradable_chain_id": None},
                 {"tradable_chain_id": "chain-id"},
             ],
-            [{"payload": "ignored"}],
+            [chain_payload],
         ]
-        chain = SimpleNamespace(symbol="SPY", id="chain-id")
 
-        with patch(
-            "robinhood.robinhood_api_logic.OptionChain.from_json",
-            return_value=chain,
-        ):
-            result = client.get_option_chain_data(["BAD", "SPY"])
+        result = client.get_option_chain_data(["BAD", "SPY"])
 
-        self.assertEqual([chain], result)
+        self.assertEqual(OptionChain.from_json(chain_payload), result)
         self.assertEqual(
             [
-                ((API_INSTRUMENTS, {PARAM_SYMBOLS: "BAD,SPY"}),),
-                ((API_OPTION_CHAINS, {"ids": "chain-id"}),),
+                call(API_INSTRUMENTS, {PARAM_SYMBOLS: "BAD,SPY"}),
+                call(API_OPTION_CHAINS, {PARAM_ID: "chain-id"}),
             ],
             client._http_client._get.call_args_list,
         )
