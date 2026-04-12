@@ -40,7 +40,7 @@ class FullQuote(ApiPayloadMixin):
     ...
 ```
 
-(*Refer to the [robinhood/api_dataclasses.py](robinhood/api_dataclasses.py)
+(*Refer to the [robinhood/api_dataclasses.py](src/robinhood/api_dataclasses.py)
 for full implementation details.*)\
 
 `OptionRequest` is the main class when requesting option data.

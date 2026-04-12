@@ -6,6 +6,7 @@ from unittest.mock import Mock, mock_open, patch
 from robinhood.browser_token_parser import (
     Firefox,
     _chrome_db_parse,
+    auto_open_browser,
     get_acc_id,
     get_token,
 )
@@ -134,6 +135,22 @@ class TestBrowserTokenParser(unittest.TestCase):
                     write_env=False,
                     open_browser=False,
                 )
+
+    @patch("robinhood.browser_token_parser.time.sleep")
+    @patch("robinhood.browser_token_parser.subprocess.run")
+    @patch("robinhood.browser_token_parser.subprocess.Popen")
+    def test_auto_open_browser_uses_xdg_open_on_linux(
+        self,
+        mock_popen,
+        mock_run,
+        mock_sleep,
+    ):
+        with patch("robinhood.browser_token_parser.sys.platform", "linux"):
+            auto_open_browser(Firefox(), wait_time=1)
+
+        mock_popen.assert_called_once_with(["xdg-open", "https://robinhood.com"])
+        mock_sleep.assert_called_once_with(1)
+        mock_run.assert_called_once_with(["pkill", "-f", "firefox"], check=False)
 
 
 if __name__ == "__main__":

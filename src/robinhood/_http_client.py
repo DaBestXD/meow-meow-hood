@@ -1,4 +1,5 @@
 import logging
+import time
 
 import requests
 
@@ -27,11 +28,28 @@ class RobinhoodHTTPClient:
     def close(self) -> None:
         self.session.close()
 
+    def _error_status_code_handler(
+        self, endpoint: str, status_code: int
+    ) -> None:
+        if status_code == 429:
+            if self.logger:
+                self.logger.warning(
+                    "HTTP 429 returned, sleeping for 65 seconds..."
+                )
+            time.sleep(65)
+        if not self.logger:
+            return None
+        if status_code == 403:
+            self.logger.info("Access token invalid, relogin into robinhood")
+        else:
+            self.logger.debug("%s returned: %d", endpoint, status_code)
+        return None
+
     def _page_get(self, endpoint: str, results: list[dict]) -> list[dict]:
         while True:
             res = self.session.get(url=endpoint)
             if res.status_code != 200:
-                print(res.status_code)
+                self._error_status_code_handler(endpoint, res.status_code)
                 return []
             res_json = res.json()
             endpoint = res_json.get("next")
@@ -55,7 +73,7 @@ class RobinhoodHTTPClient:
             url=BASE_API_LINK + endpoint, params=params, timeout=5
         )
         if res.status_code != 200:
-            print(res.status_code)
+            self._error_status_code_handler(endpoint, res.status_code)
             return []
         res_json = res.json()
         next_link: str | None = res_json.get("next")

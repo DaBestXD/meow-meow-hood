@@ -1,9 +1,8 @@
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
-from robinhood import Robinhood, OptionRequest
-from robinhood.db_logic.option_cache import OptionCache
-from robinhood.robinhood_api_logic import LoggingLevel
+from robinhood import OptionRequest, Robinhood
 
 from .timing_helper import inline_timer, temp_cache
 
@@ -34,11 +33,11 @@ def _run_helper(
     cache_enabled: bool,
     runs: int,
     verbose_level: int,
-    logging_level: LoggingLevel,
+    logging_level: Literal["NONE", "DEBUG", "INFO"] = "INFO",
     title: str,
 ) -> Decimal:
     rh = Robinhood(
-        cache_path=temp_path,
+        config_path=temp_path,
         enable_cache=cache_enabled,
         logging_level=logging_level,
     )
@@ -60,6 +59,8 @@ def _run_helper(
                 verbose=(verbose_level >= HIGH),
                 symbol=s,
             )
+            if not dates:
+                continue
             strike_time, _ = inline_timer(
                 rh.get_strike_prices,
                 verbose=(verbose_level >= HIGH),
@@ -102,7 +103,7 @@ def bench_mark_main(
     temp_path: Path,
     runs: int,
     verbose_level: int,
-    logging_level: LoggingLevel,
+    logging_level: Literal["NONE", "DEBUG", "INFO"],
 ) -> Decimal:
     """
     Terrible placeholder cold for benchmarking
@@ -142,8 +143,8 @@ def bench_mark_main(
 if __name__ == "__main__":
     total_run_time, _ = inline_timer(
         bench_mark_main,
-        runs=3,
-        verbose_level=HIGH,
-        logging_level=LoggingLevel.NONE,
+        runs=10,
+        verbose_level=MEDIUM,
+        logging_level="NONE",
     )
     print(f"Total run time: {(total_run_time):.5f} seconds")

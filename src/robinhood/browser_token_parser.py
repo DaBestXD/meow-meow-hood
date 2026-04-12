@@ -75,9 +75,9 @@ def auto_open_browser(browser: Browser, wait_time: int = 10) -> None:
         time.sleep(wait_time)
         subprocess.run(["taskKill", "/IM", browser.windows, "/F"])
     elif sys.platform == "linux":
-        subprocess.Popen(["open", "-a", browser.linux, "https://robinhood.com"])
+        subprocess.Popen(["xdg-open", "https://robinhood.com"])
         time.sleep(wait_time)
-        subprocess.run(["pkill", "-f", browser.linux])
+        subprocess.run(["pkill", "-f", browser.linux], check=False)
     return None
 
 
@@ -156,7 +156,7 @@ def get_token(
     Auto_open_browser will only run if get_acc_id returns 403
     Returns access_token and account_number
     """
-    bearer_token, account_number = None, None
+    bearer_token = None
     if sys.platform == "darwin":
         if isinstance(browser, Firefox):
             bearer_token = _firefox_db_parse(FIRE_MAC)

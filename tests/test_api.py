@@ -14,11 +14,9 @@ from robinhood.constants import (
     API_OPTION_CHAINS,
     API_OPTIONS_INSTRUMENTS,
     API_QUOTES,
-    MAX_LIMIT,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
     PARAM_ID,
-    PARAM_LIMIT,
     PARAM_OPTION_STATE,
     PARAM_OPTION_STRIKE_PRICE,
     PARAM_OPTION_TYPE,
@@ -73,9 +71,9 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_acc_id.return_value = "ACC123"
 
         client = Robinhood(
-            auto_login=True,
+            extract_token=True,
             enable_cache=True,
-            cache_path="/tmp/test-cache.db",
+            config_path="/tmp/test-cache.db",
         )
 
         mock_load_dotenv.assert_called_once_with(dotenv_path=ANY)
@@ -83,7 +81,9 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_token.assert_not_called()
         mock_http_client_cls.assert_called_once_with("env-token", None, None)
         mock_option_cache_cls.assert_called_once_with(
-            Path("/tmp/test-cache.db") / "meow-meow-hood.db",
+            Path("/tmp/test-cache.db")
+            / ".meow-meow-config"
+            / "meow-meow-hood.db",
             True,
         )
         client.close()
@@ -107,13 +107,13 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_acc_id.return_value = 403
         mock_get_token.return_value = ("fresh-token", "ACC123")
 
-        client = Robinhood(auto_login=True, enable_cache=False)
+        client = Robinhood(extract_token=True, enable_cache=False)
 
         mock_load_dotenv.assert_called_once_with(dotenv_path=ANY)
         mock_get_acc_id.assert_called_once_with("stale-token")
         mock_get_token.assert_called_once_with(
             env_path=ANY,
-            open_browser=False,
+            open_browser=True,
         )
         self.assertEqual(
             ".env",
@@ -145,12 +145,10 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         req1_ids = [f"id{i}" for i in range(150)]
         req2_ids = ["id149"] + [f"id{i}" for i in range(150, 204)] + ["missing"]
         req_to_ids = {req1: req1_ids, req2: req2_ids, req3: []}
-        calls: list[tuple[list[str], int]] = []
+        calls: list[list[str]] = []
 
-        def fake_get_option_greek_data(
-            option_ids: list[str], limit: int
-        ) -> list:
-            calls.append((list(option_ids), limit))
+        def fake_get_option_greek_data(option_ids: list[str]) -> list:
+            calls.append(list(option_ids))
             return [
                 build_option_greek_data(instrument_id=option_id)
                 for option_id in option_ids
@@ -159,14 +157,11 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
 
         client._get_option_greek_data = fake_get_option_greek_data
 
-        result = client._resolve_option_greeks_from_ids(
-            [req1, req2, req3], req_to_ids, limit=17
-        )
+        result = client._resolve_option_greeks_from_ids([req1, req2, req3], req_to_ids)
 
         self.assertEqual(2, len(calls))
-        self.assertEqual(200, len(calls[0][0]))
-        self.assertEqual(5, len(calls[1][0]))
-        self.assertTrue(all(limit == 17 for _, limit in calls))
+        self.assertEqual(200, len(calls[0]))
+        self.assertEqual(5, len(calls[1]))
         self.assertEqual(
             req1_ids,
             [greek.instrument_id for greek in result[req1]],
@@ -204,9 +199,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             return_value={req_all: [], req_call: []}
         )
 
-        result = client.no_db_option_greeks_batch_request(
-            [req_all, req_call], limit=11
-        )
+        result = client.no_db_option_greeks_batch_request([req_all, req_call])
 
         self.assertEqual({req_all: [], req_call: []}, result)
         client._resolve_option_greeks_from_ids.assert_called_once_with(
@@ -215,7 +208,6 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
                 req_all: ["call-id", "put-id"],
                 req_call: ["call-id"],
             },
-            11,
         )
 
     def test_get_option_greeks_batch_request_normalizes_single_request(self):
@@ -224,12 +216,10 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         expected = {request: [build_option_greek_data(instrument_id="id1")]}
         client.no_db_option_greeks_batch_request = Mock(return_value=expected)
 
-        result = client.get_option_greeks_batch_request(request, limit=50)
+        result = client.get_option_greeks_batch_request(request)
 
         self.assertEqual(expected, result)
-        client.no_db_option_greeks_batch_request.assert_called_once_with(
-            [request], 50
-        )
+        client.no_db_option_greeks_batch_request.assert_called_once_with([request])
 
     def test_get_strike_prices_returns_empty_lists_for_empty_results(self):
         client = build_robinhood_client()
@@ -391,10 +381,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             return_value=live_result
         )
 
-        result = client.get_option_greeks_batch_request(
-            [cached_request, missed_request],
-            limit=23,
-        )
+        result = client.get_option_greeks_batch_request([cached_request, missed_request])
 
         self.assertEqual(
             {
@@ -406,17 +393,14 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client._resolve_option_greeks_from_ids.assert_called_once_with(
             [cached_request],
             {cached_request: ["cached-1", "cached-2"]},
-            23,
         )
         client.no_db_option_greeks_batch_request.assert_called_once_with(
-            [missed_request], 23
+            [missed_request]
         )
 
     def test_get_expiration_dates_returns_cached_dates_without_http(self):
         db_cache = Mock()
-        db_cache.fetch_expiration_dates_for_symbol.return_value = [
-            "2026-04-17"
-        ]
+        db_cache.fetch_expiration_dates_for_symbol.return_value = ["2026-04-17"]
         client = build_robinhood_client(db_cache=db_cache)
 
         result = client.get_expiration_dates("SPY")
@@ -475,11 +459,9 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             API_INSTRUMENTS,
             {PARAM_SYMBOLS: "SPY,QQQ"},
         )
-        db_cache.insert_stock_info.assert_called_once_with(
-            expected_stock_info
-        )
+        db_cache.insert_stock_info.assert_called_once_with(expected_stock_info)
 
-    def test_get_oi_helper_clamps_limit_and_syncs_cache_mappings(self):
+    def test_get_oi_helper_syncs_cache_mappings(self):
         db_cache = Mock()
         client = build_robinhood_client(db_cache=db_cache)
         option_request = OptionRequest(
@@ -498,11 +480,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         option_payload = asdict(option_instrument)
         client._http_client._get.return_value = [option_payload]
 
-        result = client._get_oi_helper(
-            [option_request],
-            {"SPY": "chain-id"},
-            limit=MAX_LIMIT + 50,
-        )
+        result = client._get_oi_helper([option_request], {"SPY": "chain-id"})
 
         self.assertEqual([option_instrument], result)
         client._http_client._get.assert_called_once_with(
@@ -510,7 +488,6 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             params={
                 PARAM_EXPIRATION_DATE: "2026-04-17",
                 PARAM_CHAIN_ID: "chain-id",
-                PARAM_LIMIT: MAX_LIMIT,
                 PARAM_OPTION_STATE: "active",
                 PARAM_OPTION_TYPE: "call",
                 PARAM_OPTION_STRIKE_PRICE: 500.0,

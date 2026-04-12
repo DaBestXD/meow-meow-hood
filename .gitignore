@@ -6,3 +6,4 @@ experimental/
 build/
 dist/
 *.egg-info/
+.meow-meow-config/

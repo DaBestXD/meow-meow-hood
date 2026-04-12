@@ -3,14 +3,14 @@ from __future__ import annotations
 import logging
 import os
 from collections import defaultdict
-from enum import IntEnum
 from pathlib import Path
 from types import TracebackType
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 from dotenv import load_dotenv
 
 from robinhood.db_logic.option_cache import OptionCache
+from robinhood.set_up_script import set_up
 
 from ._http_client import RobinhoodHTTPClient
 from .api_dataclasses import (
@@ -28,13 +28,9 @@ from .constants import (
     API_OPTIONS_GREEKS_DATA,
     API_OPTIONS_INSTRUMENTS,
     API_QUOTES,
-    DEFAULT_DB_PATH,
-    DEFAULT_ENV_PATH,
-    MAX_LIMIT,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
     PARAM_ID,
-    PARAM_LIMIT,
     PARAM_OPTION_IDS,
     PARAM_OPTION_STATE,
     PARAM_OPTION_STRIKE_PRICE,
@@ -45,24 +41,17 @@ from .constants import (
 from .option_matching import map_option_requests_to_ois, match_req_to_oi
 
 
-class LoggingLevel(IntEnum):
-    NONE = 0
-    DEBUG = 10
-    INFO = 20
-
-
 class Robinhood:
     def __init__(
         self,
         *,
-        env_path: str | os.PathLike[str] = DEFAULT_ENV_PATH,
-        auto_login: bool = True,
-        open_browser: bool = False,
+        config_path: str | os.PathLike[str] = Path.cwd(),
+        extract_token: bool = True,
+        open_browser: bool = True,
         user_agent: str | None = None,
         enable_cache: bool = True,
-        cache_path: str | os.PathLike[str] = DEFAULT_DB_PATH,
         prune_expired_options: bool = True,
-        logging_level: LoggingLevel = LoggingLevel.NONE,
+        logging_level: Literal["NONE", "DEBUG", "INFO"] = "NONE",
         access_token: str | None = None,
     ) -> None:
         """
@@ -72,12 +61,9 @@ class Robinhood:
             env_path: Project directory, as a string or path-like object, that
                 contains the ``.env`` file used to load a cached
                 ``BEARER_TOKEN``.
-            auto_login: When ``True``, attempt to acquire a fresh bearer token
-                from the local browser session if the token loaded from
+            extract_token: When ``True``, attempt to acquire a fresh bearer
+                token from the local browser session if the token loaded from
                 ``.env`` is missing or rejected.
-            open_browser: When ``True``, allow ``get_token()`` to open the
-                configured browser and Robinhood page if token recovery needs a
-                browser refresh.
             user_agent: Optional ``User-Agent`` header override for the shared
                 HTTP session.
             cache: When ``True``, enable the local SQLite instrument cache.
@@ -85,36 +71,46 @@ class Robinhood:
                 SQLite cache database.
             prune_expired_options: When ``True``, remove expired option rows
                 when the cache is opened.
-            logging: Reserved flag for future request logging. It is currently
-                a no-op.
-        """
-        env_path = Path(env_path).resolve() / ".env"
-        cache_path = Path(cache_path) / "meow-meow-hood.db"
-        load_dotenv(dotenv_path=env_path)
-        token = access_token if access_token else os.getenv("BEARER_TOKEN")
-        self.user_id = -1
-        if token:
-            self.user_id = get_acc_id(token)
-        if auto_login and isinstance(self.user_id, int):
-            token, self.user_id = get_token(
-                env_path=env_path,
-                open_browser=open_browser,
-            )
-        assert token, "Bearer token cannot be none."
-        if logging_level != 0:
-            self._init_logger(logging_level)
-        else:
-            self.logger = None
-        self._http_client = RobinhoodHTTPClient(token, user_agent, self.logger)
-        self._db_cache: OptionCache | None = None
-        if enable_cache:
-            self._db_cache = OptionCache(cache_path, prune_expired_options)
+            logging: Set the logging level: ``'NONE', 'DEBUG', 'INFO'``
 
-    def _init_logger(self, level: LoggingLevel) -> None:
-        logging.basicConfig(
-            level=level, format="[%(asctime)s] [%(levelname)s] %(message)s"
-        )
+        """
+        self.user_id = -1
+        if access_token and not extract_token and not enable_cache:
+            token = access_token
+            self._db_cache = None
+        else:
+            config_dir = set_up(Path(config_path))
+            env_path = config_dir / ".env"
+            cache_path = config_dir / "meow-meow-hood.db"
+            if enable_cache:
+                self._db_cache = OptionCache(cache_path, prune_expired_options)
+            else:
+                self._db_cache = None
+            load_dotenv(dotenv_path=env_path)
+            token = access_token if access_token else os.getenv("BEARER_TOKEN")
+            if token:
+                self.user_id = get_acc_id(token)
+            if extract_token and isinstance(self.user_id, int):
+                token, self.user_id = get_token(
+                    env_path=env_path,
+                    open_browser=open_browser,
+                )
+            assert token, "Bearer token cannot be none."
+        self._init_logger(logging_level)
+        self._http_client = RobinhoodHTTPClient(token, user_agent, self.logger)
+
+    def _init_logger(self, level: Literal["NONE", "DEBUG", "INFO"]) -> None:
+        if level == "NONE":
+            self.logger = None
+            return None
+        if level == "DEBUG":
+            log_level = logging.DEBUG
+        elif level == "INFO":
+            log_level = logging.INFO
+        else:
+            log_level = logging.NOTSET
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(log_level)
         logging.getLogger("urllib3").propagate = False
         logging.getLogger("urllib3.connectionpool").propagate = False
         logging.getLogger("requests").propagate = False
@@ -138,33 +134,32 @@ class Robinhood:
             self._db_cache = None
         self._http_client.close()
 
-    def get_expiration_dates(self, symbol: str) -> list[str]:
+    def get_expiration_dates(self, symbol: str) -> list[str] | None:
         """
         Returns option_expiration dates for a given symbol as
         a list of strings, date format in yyyy-mm-dd
         """
         if self._db_cache and self._db_cache.is_option_chain_synced:
             dates = self._db_cache.fetch_expiration_dates_for_symbol(symbol)
-            if self.logger:
-                self.logger.debug(
-                    "%s cache hit for %s",
-                    self.get_expiration_dates.__name__,
-                    symbol,
-                )
             if dates:
+                if self.logger:
+                    self.logger.debug(
+                        "%s cache hit for %s",
+                        self.get_expiration_dates.__name__,
+                        symbol,
+                    )
                 return dates
         res_json = self._http_client._get(API_OPTION_CHAINS + f"{symbol}/")
         if not res_json:
-            print(f"No chain found for {symbol}")
-            return []
+            if self.logger:
+                self.logger.warning("No expiration dates found for %s", symbol)
+            return None
         chains = [OptionChain.from_json(r) for r in res_json if r]
-        if not chains:
-            return []
         if self._db_cache:
             for c in chains:
                 self._db_cache.insert_option_chain(c)
                 self._db_cache.sync_option_chain(c.symbol)
-        return chains[0].expiration_dates
+        return chains[0].expiration_dates if chains else []
 
     def get_strike_prices(
         self, *, symbol: str, exp_date: str
@@ -199,6 +194,12 @@ class Robinhood:
             if chain:
                 chain = chain.id
         if not chain:
+            if self.logger:
+                self.logger.warning(
+                    "No strike prices found for %s at %s",
+                    symbol,
+                    exp_date,
+                )
             return {call_request: [], put_request: []}
         params = {
             PARAM_CHAIN_ID: chain,
@@ -211,6 +212,13 @@ class Robinhood:
             self._db_cache.insert_option_instrument(oi_list)
             dates = {oi.expiration_date for oi in oi_list}
             or_list = [OptionRequest(symbol=symbol, exp_date=d) for d in dates]
+            if self.logger:
+                self.logger.debug(
+                    "Syncing %d option requests for %s at %s",
+                    len(or_list),
+                    symbol,
+                    exp_date,
+                )
             map_or_to_oi = map_option_requests_to_ois(or_list, oi_list)
             for k, v in map_or_to_oi.items():
                 self._db_cache.sync_option_request_dispatch(k, v)
@@ -241,7 +249,7 @@ class Robinhood:
         )
         if not res_json:
             return None
-        stock_info_list = [StockInfo.from_json(r) for r in res_json]
+        stock_info_list = [StockInfo.from_json(r) for r in res_json if r]
         if self._db_cache:
             for s in stock_info_list:
                 self._db_cache.insert_stock_info(s)
@@ -250,14 +258,14 @@ class Robinhood:
         )
 
     @overload
-    def get_stock_quotes(self, symbol: str) -> FullQuote: ...
+    def get_stock_quotes(self, symbol: str) -> FullQuote | None: ...
 
     @overload
-    def get_stock_quotes(self, symbol: list[str]) -> list[FullQuote]: ...
+    def get_stock_quotes(self, symbol: list[str]) -> list[FullQuote] | None: ...
 
     def get_stock_quotes(
         self, symbol: list[str] | str
-    ) -> FullQuote | list[FullQuote]:
+    ) -> FullQuote | list[FullQuote] | None:
         """
         Returns a list of FullQuote dataclasses
         Usage: stock = get_stock_quotes("SPY")
@@ -269,14 +277,13 @@ class Robinhood:
         )
         return_val = [FullQuote.from_json(r) for r in res_json if r]
         if not res_json:
-            return []
+            return None
         return return_val if len(return_val) > 1 else return_val[0]
 
     def _resolve_option_greeks_from_ids(
         self,
         option_requests: list[OptionRequest],
         requests_to_ids: dict[OptionRequest, list[str]],
-        limit: int = MAX_LIMIT,
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         seen_ids: set[str] = set()
         all_op_ids: list[str] = []
@@ -289,7 +296,7 @@ class Robinhood:
         op_greek_list: list[OptionGreekData] = []
         for i in range(0, len(all_op_ids), 200):
             op_greek_list.extend(
-                self._get_option_greek_data(all_op_ids[i : i + 200], limit)
+                self._get_option_greek_data(all_op_ids[i : i + 200])
             )
         greeks_by_id = {o.instrument_id: o for o in op_greek_list}
         return {
@@ -304,7 +311,6 @@ class Robinhood:
     def no_db_option_greeks_batch_request(
         self,
         option_requests: list[OptionRequest],
-        limit: int = MAX_LIMIT,
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         """
         This doesn't check the db_cache for any hits
@@ -318,14 +324,15 @@ class Robinhood:
                 [o.symbol for o in option_requests]
             )
         if not chains:
-            print("No chains for any option request")
+            if self.logger:
+                self.logger.warning("No chains returned for all option request")
             return {o: [] for o in option_requests}
         if isinstance(chains, OptionChain):
             chain_symbol_pair = {chains.symbol: chains.id}
         else:
             chain_symbol_pair = {c.symbol: c.id for c in chains}
         opt_instruments = self._get_oi_helper(
-            option_requests, chain_symbol_pair, limit
+            option_requests, chain_symbol_pair
         )
         req_to_ids: dict[OptionRequest, list[str]] = defaultdict(list)
         for oi in opt_instruments:
@@ -333,23 +340,18 @@ class Robinhood:
                 if not match_req_to_oi(o, oi):
                     continue
                 req_to_ids[o].append(oi.id)
-        return self._resolve_option_greeks_from_ids(
-            option_requests, req_to_ids, limit
-        )
+        return self._resolve_option_greeks_from_ids(option_requests, req_to_ids)
 
     def _get_oi_helper(
         self,
         option_requests: list[OptionRequest],
         chain_symbol_pair: dict[str, str],
-        limit: int = MAX_LIMIT,
     ) -> list[OptionInstrument]:
-        limit = MAX_LIMIT if limit > MAX_LIMIT else limit
         res_json: list[dict] = []
         for o in option_requests:
             params: dict[str, Any] = {
                 PARAM_EXPIRATION_DATE: o.exp_date,
                 PARAM_CHAIN_ID: chain_symbol_pair[o.symbol],
-                PARAM_LIMIT: limit,
                 PARAM_OPTION_STATE: "active",
             }
             if o.option_type:
@@ -411,7 +413,7 @@ class Robinhood:
         return return_val if len(return_val) > 1 else return_val[0]
 
     def _get_option_greek_data(
-        self, option_ids: list[str], limit: int = MAX_LIMIT
+        self, option_ids: list[str]
     ) -> list[OptionGreekData]:
         """
         Takes the list of options ids and returns
@@ -422,9 +424,14 @@ class Robinhood:
             return []
         res_json = self._http_client._get(
             endpoint=API_OPTIONS_GREEKS_DATA,
-            params={PARAM_OPTION_IDS: joined_option_ids, PARAM_LIMIT: limit},
+            params={PARAM_OPTION_IDS: joined_option_ids},
         )
         if not res_json:
+            if self.logger:
+                self.logger.warning(
+                    "No greeks returned for %d option ids",
+                    len(option_ids),
+                )
             return []
         return_val = [OptionGreekData.from_json(o) for o in res_json if o]
         return return_val
@@ -432,15 +439,12 @@ class Robinhood:
     def get_option_greeks_batch_request(
         self,
         option_requests: OptionRequest | list[OptionRequest],
-        limit: int = MAX_LIMIT,
     ) -> dict[OptionRequest, list[OptionGreekData]]:
 
         if isinstance(option_requests, OptionRequest):
             option_requests = [option_requests]
         if not self._db_cache:
-            return self.no_db_option_greeks_batch_request(
-                option_requests, limit
-            )
+            return self.no_db_option_greeks_batch_request(option_requests)
 
         cached_requests: list[OptionRequest] = []
         req_to_ids: dict[OptionRequest, list[str]] = {}
@@ -452,10 +456,10 @@ class Robinhood:
             cached_requests.append(r)
             req_to_ids.update(self._db_cache.map_option_request_to_ids(r))
         return_val = self._resolve_option_greeks_from_ids(
-            cached_requests, req_to_ids, limit
+            cached_requests, req_to_ids
         )
         if missed_cache_hits:
             return_val.update(
-                self.no_db_option_greeks_batch_request(missed_cache_hits, limit)
+                self.no_db_option_greeks_batch_request(missed_cache_hits)
             )
         return return_val

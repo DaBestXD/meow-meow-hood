@@ -249,8 +249,8 @@ class OptionCache:
         return None
 
     def is_option_request_synced(self, option_request: OptionRequest) -> bool:
-        if not self.is_cachable_option_request(option_request):
-            return False
+        # Cache is valid for one trading day. Narrower requests reuse
+        # that TTL instead of forcing a resync instraday
         if option_request.exp_date:
             query = """
                 SELECT time_to_live FROM option_expiration_sync

@@ -154,9 +154,7 @@ def build_stock_info_payload(
         "id": id,
         "url": f"https://api.robinhood.com/instruments/{id}/",
         "quote": f"https://api.robinhood.com/quotes/{symbol}/",
-        "fundamentals": (
-            f"https://api.robinhood.com/fundamentals/{symbol}/"
-        ),
+        "fundamentals": (f"https://api.robinhood.com/fundamentals/{symbol}/"),
         "market": "XNYS",
         "name": f"{symbol} Test Instrument",
         "tradeable": True,
@@ -186,9 +184,7 @@ def build_robinhood_client(
     return client
 
 
-def build_http_client(
-    *, session: object | None = None
-) -> RobinhoodHTTPClient:
+def build_http_client(*, session: object | None = None) -> RobinhoodHTTPClient:
     from robinhood._http_client import RobinhoodHTTPClient
 
     client = RobinhoodHTTPClient.__new__(RobinhoodHTTPClient)
