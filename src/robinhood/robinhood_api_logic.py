@@ -5,10 +5,11 @@ import os
 from collections import defaultdict
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Literal, overload
+from typing import Any, overload
 
 from dotenv import load_dotenv
 
+from robinhood.configure_logger import MISSING, configure_logger
 from robinhood.db_logic.option_cache import OptionCache
 from robinhood.set_up_script import set_up
 
@@ -45,6 +46,8 @@ from .constants import (
 )
 from .option_matching import map_option_requests_to_ois, match_req_to_oi
 
+logger = logging.getLogger(__name__)
+
 
 class Robinhood:
     """Client for Robinhood stock and option market data.
@@ -63,7 +66,8 @@ class Robinhood:
         user_agent: str | None = None,
         enable_cache: bool = True,
         prune_expired_options: bool = True,
-        logging_level: Literal["NONE", "DEBUG", "INFO"] = "NONE",
+        logging_level: int = logging.INFO,
+        log_handler: logging.Handler | None | object = MISSING,
         access_token: str | None = None,
     ) -> None:
         """
@@ -86,12 +90,17 @@ class Robinhood:
                 cache for option chain and option instrument metadata.
             prune_expired_options: When ``True``, remove expired option rows
                 when the cache is opened.
-            logging_level: Logging verbosity for the client. Accepted values
-                are ``"NONE"``, ``"DEBUG"``, and ``"INFO"``.
+            logging_level: Logging level constant for the library logger,
+                such as ``logging.INFO`` or ``logging.DEBUG``.
+            log_handler: Handler configuration for the library logger.
+                Pass no value to use the library's default handler.
+                ``None`` to clear library handlers and let records propagate,
+                or a ``logging.Handler`` instance to use a custom handler.
             access_token: Explicit bearer token override. When supplied with
                 ``extract_token=False`` and ``enable_cache=False``, the client
                 skips the config bootstrap path and uses this token directly.
         """
+        configure_logger(logging_level, log_handler)
         self.user_id = -1
         if access_token and not extract_token and not enable_cache:
             token = access_token
@@ -115,25 +124,7 @@ class Robinhood:
                     browser=browser,
                 )
             assert token, "Bearer token cannot be none."
-        self._init_logger(logging_level)
-        self._http_client = RobinhoodHTTPClient(token, user_agent, self.logger)
-
-    def _init_logger(self, level: Literal["NONE", "DEBUG", "INFO"]) -> None:
-        """Configure the client logger and suppress noisy dependency logs."""
-        if level == "NONE":
-            self.logger = None
-            return None
-        if level == "DEBUG":
-            log_level = logging.DEBUG
-        elif level == "INFO":
-            log_level = logging.INFO
-        else:
-            log_level = logging.NOTSET
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(log_level)
-        logging.getLogger("urllib3").propagate = False
-        logging.getLogger("urllib3.connectionpool").propagate = False
-        logging.getLogger("requests").propagate = False
+        self._http_client = RobinhoodHTTPClient(token, user_agent)
 
     def __enter__(self) -> Robinhood:
         return self
@@ -161,17 +152,15 @@ class Robinhood:
         if self._db_cache and self._db_cache.is_option_chain_synced:
             dates = self._db_cache.fetch_expiration_dates_for_symbol(symbol)
             if dates:
-                if self.logger:
-                    self.logger.debug(
-                        "%s cache hit for %s",
-                        self.get_expiration_dates.__name__,
-                        symbol,
-                    )
+                logger.debug(
+                    "%s cache hit for %s",
+                    self.get_expiration_dates.__name__,
+                    symbol,
+                )
                 return dates
         res_json = self._http_client._get(API_OPTION_CHAINS + f"{symbol}/")
         if not res_json:
-            if self.logger:
-                self.logger.warning("No expiration dates found for %s", symbol)
+            logger.warning("No expiration dates found for %s", symbol)
             return None
         chains = [OptionChain.from_json(r) for r in res_json if r]
         if self._db_cache:
@@ -196,12 +185,11 @@ class Robinhood:
         if self._db_cache and self._db_cache.is_option_request_synced(
             base_request
         ):
-            if self.logger:
-                self.logger.debug(
-                    "%s cache hit for %s",
-                    self.get_strike_prices.__name__,
-                    symbol,
-                )
+            logger.debug(
+                "%s cache hit for %s",
+                self.get_strike_prices.__name__,
+                symbol,
+            )
             return {
                 call_request: self._db_cache.fetch_strike_prices(call_request),
                 put_request: self._db_cache.fetch_strike_prices(put_request),
@@ -212,12 +200,11 @@ class Robinhood:
             if chain:
                 chain = chain.id
         if not chain:
-            if self.logger:
-                self.logger.warning(
-                    "No strike prices found for %s at %s",
-                    symbol,
-                    exp_date,
-                )
+            logger.warning(
+                "No strike prices found for %s at %s",
+                symbol,
+                exp_date,
+            )
             return {call_request: [], put_request: []}
         params = {
             PARAM_CHAIN_ID: chain,
@@ -230,23 +217,32 @@ class Robinhood:
             self._db_cache.insert_option_instrument(oi_list)
             dates = {oi.expiration_date for oi in oi_list}
             or_list = [OptionRequest(symbol=symbol, exp_date=d) for d in dates]
-            if self.logger:
-                self.logger.debug(
-                    "Syncing %d option requests for %s at %s",
-                    len(or_list),
-                    symbol,
-                    exp_date,
-                )
+            logger.debug(
+                "Syncing %d option instruments for %s at %s",
+                len(oi_list),
+                symbol,
+                exp_date,
+            )
             map_or_to_oi = map_option_requests_to_ois(or_list, oi_list)
             for k, v in map_or_to_oi.items():
                 self._db_cache.sync_option_request_dispatch(k, v)
-        call_strikes = []
-        put_strikes = []
+        call_strikes: list[float] = []
+        put_strikes: list[float] = []
         for o in oi_list:
             if o.type == "call":
                 call_strikes.append(o.strike_price)
             elif o.type == "put":
                 put_strikes.append(o.strike_price)
+        logger.info(
+            "Call options for %s: %d",
+            symbol,
+            len(call_strikes),
+        )
+        logger.info(
+            "Put options for %s: %d",
+            symbol,
+            len(put_strikes),
+        )
         return {call_request: call_strikes, put_request: put_strikes}
 
     @overload
@@ -347,8 +343,7 @@ class Robinhood:
                 [o.symbol for o in option_requests]
             )
         if not chains:
-            if self.logger:
-                self.logger.warning("No chains returned for all option request")
+            logger.warning("No chains returned for all option request")
             return {o: [] for o in option_requests}
         if isinstance(chains, OptionChain):
             chain_symbol_pair = {chains.symbol: chains.id}
@@ -455,11 +450,10 @@ class Robinhood:
             params={PARAM_OPTION_IDS: joined_option_ids},
         )
         if not res_json:
-            if self.logger:
-                self.logger.warning(
-                    "No greeks returned for %d option ids",
-                    len(option_ids),
-                )
+            logger.warning(
+                "No greeks returned for %d option ids",
+                len(option_ids),
+            )
             return []
         return_val = [OptionGreekData.from_json(o) for o in res_json if o]
         return return_val

@@ -1,6 +1,6 @@
+import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
 
 from robinhood import OptionRequest, Robinhood
 
@@ -33,7 +33,7 @@ def _run_helper(
     cache_enabled: bool,
     runs: int,
     verbose_level: int,
-    logging_level: Literal["NONE", "DEBUG", "INFO"] = "INFO",
+    logging_level: int = logging.INFO,
     title: str,
 ) -> Decimal:
     rh = Robinhood(
@@ -103,7 +103,7 @@ def bench_mark_main(
     temp_path: Path,
     runs: int,
     verbose_level: int,
-    logging_level: Literal["NONE", "DEBUG", "INFO"],
+    logging_level: int,
 ) -> Decimal:
     """
     Terrible placeholder for benchmarking
@@ -145,6 +145,6 @@ if __name__ == "__main__":
         bench_mark_main,
         runs=10,
         verbose_level=MEDIUM,
-        logging_level="NONE",
+        logging_level=logging.CRITICAL,
     )
     print(f"Total run time: {(total_run_time):.5f} seconds")

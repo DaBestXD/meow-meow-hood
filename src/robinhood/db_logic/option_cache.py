@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,6 +23,8 @@ from .db_schema import (
     OPTION_IDS_INDEX,
     OPTION_IDS_TABLE,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OptionCache:
@@ -80,6 +83,7 @@ class OptionCache:
             "id": stock_info.id,
             "chain_id": stock_info.tradable_chain_id or "",
         }
+        logger.debug("Inserting %s into main_stock_info", stock_info.symbol)
         self.con.execute(query, args)
         self.con.commit()
 
@@ -98,14 +102,19 @@ class OptionCache:
 
     def prune_expired(self) -> None:
         """Clean up columns where exp_date is no longer valid(EDT is used)"""
+        total_removed = 0
         today_et = datetime.now(ZoneInfo("America/New_York")).date()
         args = {"today_et": today_et}
         query = "DELETE FROM expiration_dates WHERE exp_date < :today_et"
-        self.con.execute(query, args)
+        cur = self.con.execute(query, args)
+        total_removed += cur.rowcount
         query = "DELETE FROM option_ids WHERE exp_date < :today_et"
-        self.con.execute(query, args)
+        cur = self.con.execute(query, args)
+        total_removed += cur.rowcount
         query = "DELETE FROM option_expiration_sync WHERE exp_date < :today_et"
-        self.con.execute(query, args)
+        cur = self.con.execute(query, args)
+        total_removed += cur.rowcount
+        logger.debug("Removed %d rows from cache", total_removed)
         self.con.commit()
 
     def is_option_chain_synced(self, symbol: str) -> bool:

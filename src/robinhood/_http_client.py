@@ -11,16 +11,16 @@ from .constants import (
     RESULTS,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class RobinhoodHTTPClient:
     def __init__(
         self,
         token: str,
         user_agent: str | None = None,
-        logger: logging.Logger | None = None,
     ) -> None:
         self.session = requests.Session()
-        self.logger = logger
         self.session.headers["Authorization"] = f"Bearer {token}"
         if user_agent:
             self.session.headers["User-Agent"] = user_agent
@@ -36,17 +36,13 @@ class RobinhoodHTTPClient:
         No retry is attempted and an empty value is returned
         """
         if status_code == 429:
-            if self.logger:
-                self.logger.warning(
-                    "HTTP 429 returned, sleeping for 65 seconds..."
-                )
+            logger.warning("HTTP 429 returned, sleeping for 65 seconds...")
             time.sleep(65)
-        if not self.logger:
-            return None
         if status_code == 403:
-            self.logger.info("Access token invalid, relogin into robinhood")
+            # TODO raise error here
+            logger.critical("Access token invalid, relogin into robinhood")
         else:
-            self.logger.debug("%s returned: %d", endpoint, status_code)
+            logger.debug("%s returned: %d", endpoint, status_code)
         return None
 
     def _page_get(self, endpoint: str, results: list[dict]) -> list[dict]:
@@ -67,12 +63,11 @@ class RobinhoodHTTPClient:
         endpoint: str,
         params: dict | None = None,
     ) -> list[dict]:
-        if self.logger:
-            self.logger.debug(
-                "GET request: %s, Params length: %d",
-                endpoint,
-                len(params) if params else 0,
-            )
+        logger.debug(
+            "GET request: %s, Params length: %d",
+            endpoint,
+            len(params) if params else 0,
+        )
         res = self.session.get(
             url=BASE_API_LINK + endpoint, params=params, timeout=5
         )
