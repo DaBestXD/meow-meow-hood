@@ -80,7 +80,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_load_dotenv.assert_called_once_with(dotenv_path=ANY)
         mock_get_acc_id.assert_called_once_with("env-token")
         mock_get_token.assert_not_called()
-        mock_http_client_cls.assert_called_once_with("env-token", None, None)
+        mock_http_client_cls.assert_called_once_with("env-token", None)
         mock_option_cache_cls.assert_called_once_with(
             Path("/tmp/test-cache.db")
             / ".meow-meow-config"
@@ -121,7 +121,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             ".env",
             mock_get_token.call_args.kwargs["env_path"].name,
         )
-        mock_http_client_cls.assert_called_once_with("fresh-token", None, None)
+        mock_http_client_cls.assert_called_once_with("fresh-token", None)
         mock_option_cache_cls.assert_not_called()
         client.close()
 
@@ -157,7 +157,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             open_browser=True,
             browser=Firefox(),
         )
-        mock_http_client_cls.assert_called_once_with("fresh-token", None, None)
+        mock_http_client_cls.assert_called_once_with("fresh-token", None)
         mock_option_cache_cls.assert_not_called()
         client.close()
 

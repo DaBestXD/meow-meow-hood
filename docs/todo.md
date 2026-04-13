@@ -2,8 +2,6 @@
 
 ## Priority TODO
 
-- Fix logging output
-
 - Expose open_browser function, custom SQL function
 
 - Add view accounts info endpoint, view watch-list endpoint

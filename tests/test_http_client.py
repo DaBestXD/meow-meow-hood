@@ -20,7 +20,6 @@ class TestRobinhoodHTTPClient(unittest.TestCase):
             "Bearer bearer-token", session.headers["Authorization"]
         )
         self.assertEqual("agent/1.0", session.headers["User-Agent"])
-        self.assertIsNone(client.logger)
 
     def test_page_get_accumulates_results_until_next_link_is_empty(self):
         session = Mock()
