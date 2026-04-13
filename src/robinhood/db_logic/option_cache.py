@@ -98,6 +98,7 @@ class OptionCache:
             cur = self.con.executemany(query, args)
         else:
             cur = self.con.execute(query, args)
+        self.con.commit()
         return cur.fetchall()
 
     def prune_expired(self) -> None:

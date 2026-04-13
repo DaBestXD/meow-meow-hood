@@ -42,12 +42,8 @@ class TestBrowserTokenParser(unittest.TestCase):
             valid_token = _build_test_jwt(exp=int(time.time()) + 3600)
             log_file.write_text(
                 '[\\"access_token\\",\\"not-a-jwt\\"]'
-                '[\\"access_token\\",\\"'
-                + expired_token
-                + '\\"]'
-                '[\\"access_token\\",\\"'
-                + valid_token
-                + '\\"]'
+                '[\\"access_token\\",\\"' + expired_token + '\\"]'
+                '[\\"access_token\\",\\"' + valid_token + '\\"]'
             )
 
             token = _chrome_db_parse(Path(temp_dir))

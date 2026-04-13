@@ -2,8 +2,6 @@
 
 ## Priority TODO
 
-- Expose open_browser function, custom SQL function
-
 - Add view accounts info endpoint, view watch-list endpoint
 
 - Add buying and selling positions for stocks and options

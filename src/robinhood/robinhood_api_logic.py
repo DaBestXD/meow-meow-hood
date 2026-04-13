@@ -100,21 +100,22 @@ class Robinhood:
         if access_token and not extract_token and not enable_cache:
             token = access_token
             self._db_cache = None
+            self.env_path = None
         else:
             config_dir = set_up(Path(config_path))
-            env_path = config_dir / ".env"
+            self.env_path = config_dir / ".env"
             cache_path = config_dir / "meow-meow-hood.db"
             if enable_cache:
                 self._db_cache = OptionCache(cache_path, prune_expired_options)
             else:
                 self._db_cache = None
-            load_dotenv(dotenv_path=env_path)
+            load_dotenv(dotenv_path=self.env_path)
             token = access_token if access_token else os.getenv("BEARER_TOKEN")
             if token:
                 self.user_id = get_acc_id(token)
             if extract_token and isinstance(self.user_id, int):
                 token, self.user_id = get_token(
-                    env_path=env_path,
+                    env_path=self.env_path,
                     open_browser=open_browser,
                 )
             assert token, "Bearer token cannot be none."
@@ -479,3 +480,33 @@ class Robinhood:
                 self.no_db_option_greeks_batch_request(missed_cache_hits)
             )
         return return_val
+
+    def refresh_access_token(self) -> None:
+        """
+        This function should only need to be run once a week.
+        In theory as long as you keep running this function it should
+        refresh the access token. Opening the browser is necessary
+        for refreshing the access token.
+        pkill/taskKill is the easiest way to clean up the open browser
+        though not ideal as it closes all the entire browser.
+        """
+        if not self.env_path:
+            logger.warning("No env path was provided. Not writing to env")
+            token, _ = get_token("", write_env=False)
+        else:
+            token, _ = get_token(self.env_path)
+        self._http_client.session.headers["Authorization"] = f"Bearer {token}"
+        return None
+
+    def execute_custom_sql(
+        self, query: str, args: list[dict[str, Any] | dict[str, Any]]
+    ) -> list[Any] | None:
+        """
+        Use if you need to execute a custom sql query
+        Use a list of args if you need to use ``executemany()``
+        """
+        if not self._db_cache:
+            logger.warning("No db enabled! Nothing to execute!")
+            return None
+        else:
+            return self._db_cache.execute_query_with_args(query, args)
