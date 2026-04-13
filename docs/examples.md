@@ -9,6 +9,9 @@ These examples assume one of the following is true:
 - you are already logged in to Robinhood in a local Chrome or Firefox profile
 - you plan to pass an `access_token` yourself
 
+When `extract_token=True` (the default), the client automatically checks Chrome
+first and then Firefox for a valid local session token.
+
 Imports used in the examples:
 
 ```python
@@ -27,8 +30,8 @@ with Robinhood() as rh:
     print("Client is ready")
 ```
 
-This creates a `Robinhood` client with browser token extraction and local cache
-support enabled by default.
+This creates a `Robinhood` client with automatic browser token discovery and
+local cache support enabled by default.
 
 ## Create A Client Without A Context Manager
 

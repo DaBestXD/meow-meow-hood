@@ -22,13 +22,15 @@ Ensure you are logged in locally to Robinhood on either:
 - Chrome
 - Firefox
 
-It works by extracting the locally stored access token from the browser folder.\
-By default it will automatically try to extract the token, this can be disabled
-on class creation.\
-You will need to pass in the access token manually if extract_token is disabled.\
+It works by extracting a locally stored access token from your browser data.\
+By default the client automatically checks Chrome first and then Firefox for a
+valid token.\
+If a stored token is rejected and `open_browser=True`, the refresh helper may
+briefly open the installed browsers to refresh auth state.\
+This behavior can be disabled on class creation with `extract_token=False`.\
+You will need to pass in the access token manually if token extraction is
+disabled.\
 Config folder is created at the cwd labeled `.meow-meow-hood`.\
-Ensure you select the correct browser on class creation current default is Chrome.\
-Use either `Chrome()` or `Firefox()` for the `browser=` parameter.\
 If cache enabled db file is placed inside this folder. Same for extract_token.
 
 ```python

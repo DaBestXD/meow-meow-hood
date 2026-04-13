@@ -9,7 +9,6 @@ from robinhood.api_dataclasses import (
     OptionRequest,
     StockInfo,
 )
-from robinhood.browser_token_parser import Chrome, Firefox
 from robinhood.constants import (
     API_INSTRUMENTS,
     API_OPTION_CHAINS,
@@ -115,7 +114,6 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_token.assert_called_once_with(
             env_path=ANY,
             open_browser=True,
-            browser=Chrome(),
         )
         self.assertEqual(
             ".env",
@@ -131,7 +129,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
     @patch("robinhood.robinhood_api_logic.get_acc_id")
     @patch("robinhood.robinhood_api_logic.os.getenv")
     @patch("robinhood.robinhood_api_logic.load_dotenv")
-    def test_init_passes_custom_browser_to_token_refresh(
+    def test_init_refreshes_token_without_browser_override(
         self,
         mock_load_dotenv,
         mock_getenv,
@@ -147,7 +145,6 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client = Robinhood(
             extract_token=True,
             enable_cache=False,
-            browser=Firefox(),
         )
 
         mock_load_dotenv.assert_called_once_with(dotenv_path=ANY)
@@ -155,7 +152,6 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_token.assert_called_once_with(
             env_path=ANY,
             open_browser=True,
-            browser=Firefox(),
         )
         mock_http_client_cls.assert_called_once_with("fresh-token", None)
         mock_option_cache_cls.assert_not_called()

@@ -23,8 +23,6 @@ from .api_dataclasses import (
     StockInfo,
 )
 from .browser_token_parser import (
-    Browser,
-    Chrome,
     get_acc_id,
     get_token,
 )
@@ -62,7 +60,6 @@ class Robinhood:
         config_path: str | os.PathLike[str] = Path.cwd(),
         extract_token: bool = True,
         open_browser: bool = True,
-        browser: Browser = Chrome(),
         user_agent: str | None = None,
         enable_cache: bool = True,
         prune_expired_options: bool = True,
@@ -82,8 +79,6 @@ class Robinhood:
                 ``.env`` is missing or rejected.
             open_browser: When ``True``, allow the browser refresh helper to
                 briefly open Robinhood if a stored token is rejected.
-            browser: Browser profile to inspect when extracting a bearer token
-                from local browser storage.
             user_agent: Optional ``User-Agent`` header override for the shared
                 HTTP session.
             enable_cache: When ``True``, enable the local SQLite instrument
@@ -121,7 +116,6 @@ class Robinhood:
                 token, self.user_id = get_token(
                     env_path=env_path,
                     open_browser=open_browser,
-                    browser=browser,
                 )
             assert token, "Bearer token cannot be none."
         self._http_client = RobinhoodHTTPClient(token, user_agent)

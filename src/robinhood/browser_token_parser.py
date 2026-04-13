@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -15,18 +16,23 @@ import snappy
 
 from .constants import ACCOUNT_NUMBER, API_ACCOUNT, RESULTS
 
+CHROME_DB_NAME = Path("https_robinhood.com_0.indexeddb.leveldb")
 HOME_DIR = Path.home()
 FIRE_MAC = HOME_DIR / Path("Library/Application Support/Firefox/Profiles/")
 FIRE_WINDOWS = HOME_DIR / Path("AppData/Roaming/Mozilla/Firefox/Profiles/")
 FIRE_LINUX = HOME_DIR / Path(".mozilla/firefox/")
-CHROME_MAC = HOME_DIR / Path(
-    "Library/Application Support/Google/Chrome/Default/Local Storage/leveldb"
+CHROME_MAC = (
+    HOME_DIR
+    / Path("Library/Application Support/Google/Chrome/Default/IndexedDB")
+    / CHROME_DB_NAME
 )
-CHROME_WINDOWS = HOME_DIR / Path(
-    "AppData/Local/Google/Chrome/User Data/Default/Local Storage/leveldb"
+CHROME_WINDOWS = (
+    HOME_DIR
+    / Path("AppData/Local/Google/Chrome/User Data/Default/IndexedDB")
+    / CHROME_DB_NAME
 )
-CHROME_LINUX = HOME_DIR / Path(
-    ".config/google-chrome/Default/Local Storage/leveldb"
+CHROME_LINUX = (
+    HOME_DIR / Path(".config/google-chrome/Default/IndexedDB") / CHROME_DB_NAME
 )
 DB_PATH = Path("storage/default/https+++robinhood.com/ls/data.sqlite")
 
@@ -125,11 +131,22 @@ def _chrome_db_parse(f: Path) -> str | None:
         try:
             with open(n, "rb") as k:
                 dump = k.read().decode(errors="ignore")
-                token = re.search(
-                    r'"access_token":"([^"]+)"',
+                tokens = re.findall(
+                    r'\\"access_token\\",\\"([^\\"]+)',
                     dump,
                 )
-                return token.group(1) if token else None
+                for t in tokens:
+                    try:
+                        payload_b64 = t.split(".")[1]
+                        payload_b64 += "=" * (-len(payload_b64) % 4)
+                        payload = json.loads(
+                            base64.urlsafe_b64decode(payload_b64).decode()
+                        )
+                    except Exception:
+                        continue
+                    if payload.get("exp", 0) > int(time.time()):
+                        return t
+                return None
         except FileNotFoundError:
             return None
 
@@ -146,7 +163,6 @@ def get_acc_id(bearer_token: str) -> str | int:
 
 def get_token(
     env_path: str | os.PathLike[str],
-    browser: Browser = Firefox(),
     write_env: bool = True,
     open_browser: bool = True,
 ) -> tuple[str, str]:
@@ -156,23 +172,31 @@ def get_token(
     Returns access_token and account_number
     """
     bearer_token = None
-    if sys.platform == "darwin":
-        if isinstance(browser, Firefox):
-            bearer_token = _firefox_db_parse(FIRE_MAC)
-        elif isinstance(browser, Chrome):
-            bearer_token = _chrome_db_parse(CHROME_MAC)
-    elif sys.platform == "linux":
-        if isinstance(browser, Firefox):
-            bearer_token = _firefox_db_parse(FIRE_LINUX)
-        elif isinstance(browser, Chrome):
-            bearer_token = _chrome_db_parse(CHROME_LINUX)
-    elif sys.platform == "win32":
-        if isinstance(browser, Firefox):
-            bearer_token = _firefox_db_parse(FIRE_WINDOWS)
-        elif isinstance(browser, Chrome):
-            bearer_token = _chrome_db_parse(CHROME_WINDOWS)
-    else:
-        raise OSError("Platform not supported")
+    for browser in (Chrome(), Firefox()):
+        if sys.platform == "darwin":
+            if isinstance(browser, Firefox):
+                bearer_token = _firefox_db_parse(FIRE_MAC)
+            elif isinstance(browser, Chrome):
+                bearer_token = _chrome_db_parse(CHROME_MAC)
+        elif sys.platform == "linux":
+            if isinstance(browser, Firefox):
+                bearer_token = _firefox_db_parse(FIRE_LINUX)
+            elif isinstance(browser, Chrome):
+                bearer_token = _chrome_db_parse(CHROME_LINUX)
+        elif sys.platform == "win32":
+            if isinstance(browser, Firefox):
+                bearer_token = _firefox_db_parse(FIRE_WINDOWS)
+            elif isinstance(browser, Chrome):
+                bearer_token = _chrome_db_parse(CHROME_WINDOWS)
+        else:
+            raise OSError("Platform not supported")
+        if not bearer_token:
+            continue
+        account_number = get_acc_id(bearer_token)
+        if isinstance(account_number, int):
+            continue
+        else:
+            break
 
     assert bearer_token, """
         Unable to find bearer_token make sure you are logged into robinhood
@@ -180,9 +204,10 @@ def get_token(
     """
 
     account_number = get_acc_id(bearer_token)
-    if account_number == 403 and open_browser:
-        auto_open_browser(browser)
-        return get_token(env_path, browser, write_env, (not open_browser))
+    if (account_number == 401 or account_number == 403) and open_browser:
+        auto_open_browser(Firefox())
+        auto_open_browser(Chrome())
+        return get_token(env_path, write_env, (not open_browser))
 
     assert isinstance(account_number, str), "Unable to find account_number"
 
