@@ -148,9 +148,13 @@ class TestBrowserTokenParser(unittest.TestCase):
         with patch("robinhood.browser_token_parser.sys.platform", "linux"):
             auto_open_browser(Firefox(), wait_time=1)
 
-        mock_popen.assert_called_once_with(["xdg-open", "https://robinhood.com"])
+        mock_popen.assert_called_once_with(
+            ["xdg-open", "https://robinhood.com"]
+        )
         mock_sleep.assert_called_once_with(1)
-        mock_run.assert_called_once_with(["pkill", "-f", "firefox"], check=False)
+        mock_run.assert_called_once_with(
+            ["pkill", "-f", "firefox"], check=False
+        )
 
 
 if __name__ == "__main__":

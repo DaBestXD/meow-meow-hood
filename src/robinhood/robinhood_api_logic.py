@@ -21,7 +21,12 @@ from .api_dataclasses import (
     OptionRequest,
     StockInfo,
 )
-from .browser_token_parser import get_acc_id, get_token
+from .browser_token_parser import (
+    Browser,
+    Chrome,
+    get_acc_id,
+    get_token,
+)
 from .constants import (
     API_INSTRUMENTS,
     API_OPTION_CHAINS,
@@ -42,12 +47,19 @@ from .option_matching import map_option_requests_to_ois, match_req_to_oi
 
 
 class Robinhood:
+    """Client for Robinhood stock and option market data.
+
+    The client manages bearer token discovery, a shared HTTP session, and an
+    optional local SQLite cache for option chain and instrument metadata.
+    """
+
     def __init__(
         self,
         *,
         config_path: str | os.PathLike[str] = Path.cwd(),
         extract_token: bool = True,
         open_browser: bool = True,
+        browser: Browser = Chrome(),
         user_agent: str | None = None,
         enable_cache: bool = True,
         prune_expired_options: bool = True,
@@ -58,21 +70,27 @@ class Robinhood:
         Initialize a Robinhood client instance.
 
         Args:
-            env_path: Project directory, as a string or path-like object, that
-                contains the ``.env`` file used to load a cached
-                ``BEARER_TOKEN``.
+            config_path: Base directory where ``.meow-meow-config`` is created
+                or reused. The client stores its ``.env`` token cache and local
+                SQLite database there.
             extract_token: When ``True``, attempt to acquire a fresh bearer
                 token from the local browser session if the token loaded from
                 ``.env`` is missing or rejected.
+            open_browser: When ``True``, allow the browser refresh helper to
+                briefly open Robinhood if a stored token is rejected.
+            browser: Browser profile to inspect when extracting a bearer token
+                from local browser storage.
             user_agent: Optional ``User-Agent`` header override for the shared
                 HTTP session.
-            cache: When ``True``, enable the local SQLite instrument cache.
-            db_path: Filesystem path, as a string or path-like object, for the
-                SQLite cache database.
+            enable_cache: When ``True``, enable the local SQLite instrument
+                cache for option chain and option instrument metadata.
             prune_expired_options: When ``True``, remove expired option rows
                 when the cache is opened.
-            logging: Set the logging level: ``'NONE', 'DEBUG', 'INFO'``
-
+            logging_level: Logging verbosity for the client. Accepted values
+                are ``"NONE"``, ``"DEBUG"``, and ``"INFO"``.
+            access_token: Explicit bearer token override. When supplied with
+                ``extract_token=False`` and ``enable_cache=False``, the client
+                skips the config bootstrap path and uses this token directly.
         """
         self.user_id = -1
         if access_token and not extract_token and not enable_cache:
@@ -94,12 +112,14 @@ class Robinhood:
                 token, self.user_id = get_token(
                     env_path=env_path,
                     open_browser=open_browser,
+                    browser=browser,
                 )
             assert token, "Bearer token cannot be none."
         self._init_logger(logging_level)
         self._http_client = RobinhoodHTTPClient(token, user_agent, self.logger)
 
     def _init_logger(self, level: Literal["NONE", "DEBUG", "INFO"]) -> None:
+        """Configure the client logger and suppress noisy dependency logs."""
         if level == "NONE":
             self.logger = None
             return None
@@ -124,7 +144,6 @@ class Robinhood:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-
         self.close()
 
     def close(self) -> None:
@@ -165,7 +184,6 @@ class Robinhood:
         self, *, symbol: str, exp_date: str
     ) -> dict[OptionRequest, list[float]]:
         """
-        Usage get_strike_prices("SPY","2026-04-20")
         Returns a dict of OptionRequest and a list of strike prices
         """
         base_request = OptionRequest(symbol=symbol, exp_date=exp_date)
@@ -240,6 +258,7 @@ class Robinhood:
     def get_stock_info(
         self, symbols: str | list[str]
     ) -> StockInfo | list[StockInfo] | None:
+        """Return stock metadata for one symbol or a list of symbols."""
         if isinstance(symbols, str):
             joined_symbols = symbols
         else:
@@ -285,6 +304,10 @@ class Robinhood:
         option_requests: list[OptionRequest],
         requests_to_ids: dict[OptionRequest, list[str]],
     ) -> dict[OptionRequest, list[OptionGreekData]]:
+        """
+        Private helper function.
+        Fetch greek data in batches and rebuild the request-to-data mapping.
+        """
         seen_ids: set[str] = set()
         all_op_ids: list[str] = []
         for request in option_requests:
@@ -347,6 +370,10 @@ class Robinhood:
         option_requests: list[OptionRequest],
         chain_symbol_pair: dict[str, str],
     ) -> list[OptionInstrument]:
+        """
+        Private helper function.
+        Fetch option instruments for the given requests and sync cache rows.
+        """
         res_json: list[dict] = []
         for o in option_requests:
             params: dict[str, Any] = {
@@ -386,6 +413,7 @@ class Robinhood:
     def get_option_chain_data(
         self, symbol: str | list[str]
     ) -> list[OptionChain] | OptionChain | None:
+        """Return option chain metadata for one symbol or many symbols."""
         if isinstance(symbol, str):
             res_json = self._http_client._get(API_OPTION_CHAINS + f"{symbol}/")
         else:
@@ -440,7 +468,7 @@ class Robinhood:
         self,
         option_requests: OptionRequest | list[OptionRequest],
     ) -> dict[OptionRequest, list[OptionGreekData]]:
-
+        """Return option greek data grouped by the input request objects."""
         if isinstance(option_requests, OptionRequest):
             option_requests = [option_requests]
         if not self._db_cache:

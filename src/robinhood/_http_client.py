@@ -31,6 +31,10 @@ class RobinhoodHTTPClient:
     def _error_status_code_handler(
         self, endpoint: str, status_code: int
     ) -> None:
+        """
+        Current logic is to sleep for 65 seconds after hitting a rate limit.
+        No retry is attempted and an empty value is returned
+        """
         if status_code == 429:
             if self.logger:
                 self.logger.warning(

@@ -55,7 +55,7 @@ class Firefox(Browser):
 def auto_open_browser(browser: Browser, wait_time: int = 10) -> None:
     """
     This function should only need to be run once a month.
-    Opening the browser is necessary for freshing the bearer token.
+    Opening the browser is necessary for refreshing the bearer token.
     pkill/taskKill is the easiest way to clean up the open browser
     though not ideal as it closes all the entire browser
     """
@@ -75,6 +75,8 @@ def auto_open_browser(browser: Browser, wait_time: int = 10) -> None:
         time.sleep(wait_time)
         subprocess.run(["taskKill", "/IM", browser.windows, "/F"])
     elif sys.platform == "linux":
+        # TODO change this to open the correct browser choice
+        # This will fail if it opens firefox but browser chosen is chrome
         subprocess.Popen(["xdg-open", "https://robinhood.com"])
         time.sleep(wait_time)
         subprocess.run(["pkill", "-f", browser.linux], check=False)
@@ -115,7 +117,7 @@ def _chrome_db_parse(f: Path) -> str | None:
     Current parser uses the robinhood leveldb folder
     and the reads the log file for the bearer token.
     Incase of chrome profile recursively call the function twice
-    File path: IndexedDB --> robinhood.leveldb dir --> 00001.log file
+    File path: IndexedDB --> robinhood.leveldb dir --> 0000X.log file
     """
     for n in f.iterdir():
         if ".log" not in n.name:
@@ -132,14 +134,11 @@ def _chrome_db_parse(f: Path) -> str | None:
             return None
 
 
-# Add retry for 50X errors
+# Add retry for 5XX errors
 def get_acc_id(bearer_token: str) -> str | int:
     headers = {"authorization": f"Bearer {bearer_token}"}
     r = requests.get(API_ACCOUNT, headers=headers)
     if r.status_code == 200:
-        assert r.json()[RESULTS][0][ACCOUNT_NUMBER], (
-            "Json structure has changed :("
-        )
         return r.json()[RESULTS][0][ACCOUNT_NUMBER]
     else:
         return r.status_code

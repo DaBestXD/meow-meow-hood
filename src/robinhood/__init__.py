@@ -14,7 +14,7 @@
 #  \ \_\ \_\  \ \_____\  \ \_____\  \ \____-
 #   \/_/\/_/   \/_____/   \/_____/   \/____/
 # 🐈
-
+import importlib.metadata as metadata
 
 from .api_dataclasses import (
     FullQuote,
@@ -26,6 +26,11 @@ from .api_dataclasses import (
 )
 from .robinhood_api_logic import Robinhood
 
+try:
+    __version__ = metadata.version("meow-meow-hood")
+except metadata.PackageNotFoundError:
+    __version__ = "0.0.0"
+
 __all__ = [
     "Robinhood",
     "OptionRequest",
@@ -33,7 +38,5 @@ __all__ = [
     "OptionGreekData",
     "FullQuote",
     "StockInfo",
+    "__version__",
 ]
-
-
-__version__ = "0.1.0"

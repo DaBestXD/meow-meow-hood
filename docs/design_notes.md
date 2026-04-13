@@ -1,11 +1,15 @@
 # Design Notes
 
 I mostly designed this because I needed a Robinhood API wrapper
-that is reasonable fast so I can make a TUI to load option prices.
+that is reasonably fast so I can make a TUI to load option prices.
 
 Q: Why not just use a broker that provides an official API?
 
 A: I'm too lazy to open another account with another broker.
+
+Q: Why meow-meow-hood
+
+A: I like cats
 
 ## Caching Strategy
 
@@ -21,6 +25,9 @@ Example of the normal route to get option market data:\
 `Option Chain Data --> Option Instrument Data --> Option Greek Data`\
 With a cache hit:\
 `Option Ids cached --> Option Greek Data`
+
+For the SQLite table layout and cache relationships, see
+[Database Schema](./db_schema.md).
 
 ## Option Request
 

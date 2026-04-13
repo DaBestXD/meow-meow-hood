@@ -1,5 +1,3 @@
-![Poorly drawn Robinhood logo next to a cat](./docs/pictures/logo.png)
-
 # Meow-Meow-Hood API
 
 A Robinhood API wrapper for fast option market data
@@ -50,7 +48,7 @@ class FullQuote(ApiPayloadMixin):
     ...
 ```
 
-(*Refer to [robinhood/api_dataclasses.py](src/robinhood/api_dataclasses.py)
+(*Refer to robinhood/api_dataclasses.py
 for full implementation details.*)
 
 `OptionRequest` is the main class when requesting option data.
@@ -90,7 +88,7 @@ rh.close()
 This library uses a local SQLite database to cache option
 instruments and reduce the amount of requests made per call.\
 Cache is validated with a TTL of the next day at 9:30 EDT.\
-*See [/docs/design_notes.md](/docs/design_notes.md) for more details*
+*See /docs/design_notes.md for more details*
 
 Example where caching improves speed.
 
@@ -140,4 +138,4 @@ represents a run with cache hits.
 
 ## TODO log
 
-See [/docs/todo.md](/docs/design_notes.md) for planned features.
+See /docs/todo.md for planned features.

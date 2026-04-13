@@ -20,15 +20,15 @@ class TestOptionCache(unittest.TestCase):
 
     def test_is_cachable_option_request_rejects_partial_filters(self):
         self.assertTrue(
-            OptionCache.is_cachable_option_request(OptionRequest(symbol="SPY"))
+            OptionCache._is_cachable_option_request(OptionRequest(symbol="SPY"))
         )
         self.assertFalse(
-            OptionCache.is_cachable_option_request(
+            OptionCache._is_cachable_option_request(
                 OptionRequest(symbol="SPY", option_type="call")
             )
         )
         self.assertFalse(
-            OptionCache.is_cachable_option_request(
+            OptionCache._is_cachable_option_request(
                 OptionRequest(symbol="SPY", strike_price=500.0)
             )
         )

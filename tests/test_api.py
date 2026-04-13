@@ -9,6 +9,7 @@ from robinhood.api_dataclasses import (
     OptionRequest,
     StockInfo,
 )
+from robinhood.browser_token_parser import Chrome, Firefox
 from robinhood.constants import (
     API_INSTRUMENTS,
     API_OPTION_CHAINS,
@@ -114,10 +115,47 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_token.assert_called_once_with(
             env_path=ANY,
             open_browser=True,
+            browser=Chrome(),
         )
         self.assertEqual(
             ".env",
             mock_get_token.call_args.kwargs["env_path"].name,
+        )
+        mock_http_client_cls.assert_called_once_with("fresh-token", None, None)
+        mock_option_cache_cls.assert_not_called()
+        client.close()
+
+    @patch("robinhood.robinhood_api_logic.OptionCache")
+    @patch("robinhood.robinhood_api_logic.RobinhoodHTTPClient")
+    @patch("robinhood.robinhood_api_logic.get_token")
+    @patch("robinhood.robinhood_api_logic.get_acc_id")
+    @patch("robinhood.robinhood_api_logic.os.getenv")
+    @patch("robinhood.robinhood_api_logic.load_dotenv")
+    def test_init_passes_custom_browser_to_token_refresh(
+        self,
+        mock_load_dotenv,
+        mock_getenv,
+        mock_get_acc_id,
+        mock_get_token,
+        mock_http_client_cls,
+        mock_option_cache_cls,
+    ):
+        mock_getenv.return_value = "stale-token"
+        mock_get_acc_id.return_value = 403
+        mock_get_token.return_value = ("fresh-token", "ACC123")
+
+        client = Robinhood(
+            extract_token=True,
+            enable_cache=False,
+            browser=Firefox(),
+        )
+
+        mock_load_dotenv.assert_called_once_with(dotenv_path=ANY)
+        mock_get_acc_id.assert_called_once_with("stale-token")
+        mock_get_token.assert_called_once_with(
+            env_path=ANY,
+            open_browser=True,
+            browser=Firefox(),
         )
         mock_http_client_cls.assert_called_once_with("fresh-token", None, None)
         mock_option_cache_cls.assert_not_called()
@@ -157,7 +195,9 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
 
         client._get_option_greek_data = fake_get_option_greek_data
 
-        result = client._resolve_option_greeks_from_ids([req1, req2, req3], req_to_ids)
+        result = client._resolve_option_greeks_from_ids(
+            [req1, req2, req3], req_to_ids
+        )
 
         self.assertEqual(2, len(calls))
         self.assertEqual(200, len(calls[0]))
@@ -219,7 +259,9 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         result = client.get_option_greeks_batch_request(request)
 
         self.assertEqual(expected, result)
-        client.no_db_option_greeks_batch_request.assert_called_once_with([request])
+        client.no_db_option_greeks_batch_request.assert_called_once_with(
+            [request]
+        )
 
     def test_get_strike_prices_returns_empty_lists_for_empty_results(self):
         client = build_robinhood_client()
@@ -381,7 +423,9 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             return_value=live_result
         )
 
-        result = client.get_option_greeks_batch_request([cached_request, missed_request])
+        result = client.get_option_greeks_batch_request(
+            [cached_request, missed_request]
+        )
 
         self.assertEqual(
             {

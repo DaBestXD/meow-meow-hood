@@ -106,7 +106,7 @@ def bench_mark_main(
     logging_level: Literal["NONE", "DEBUG", "INFO"],
 ) -> Decimal:
     """
-    Terrible placeholder cold for benchmarking
+    Terrible placeholder for benchmarking
     """
     total_time = Decimal(0)
     no_cache_run = _run_helper(

@@ -46,6 +46,7 @@ class OptionCache:
 
     @staticmethod
     def next_trading_day_timestamp() -> int:
+        """Next trading day is 9:30 EDT"""
         plus_one = (datetime.now(ZoneInfo("America/New_York"))) + timedelta(
             days=1
         )
@@ -57,7 +58,11 @@ class OptionCache:
         return int((datetime.now(ZoneInfo("America/New_York"))).timestamp())
 
     @staticmethod
-    def is_cachable_option_request(option_request: OptionRequest) -> bool:
+    def _is_cachable_option_request(option_request: OptionRequest) -> bool:
+        """
+        Helper function to check if option request is cachable.
+        Cachable if no strike_price and no option_type.
+        """
         if option_request.strike_price:
             return False
         if option_request.option_type:
@@ -65,6 +70,7 @@ class OptionCache:
         return True
 
     def insert_stock_info(self, stock_info: StockInfo) -> None:
+        """Insert stock_info: symbol, id, and chain_id into main_stock_info"""
         query = """
             INSERT OR REPLACE INTO main_stock_info
             VALUES(:symbol, :id, :chain_id)
@@ -82,6 +88,7 @@ class OptionCache:
     ) -> list[Any]:
         """
         Use if you need to execute a custom sql query
+        Use a list of args if you need to use ``executemany()``
         """
         if isinstance(args, list):
             cur = self.con.executemany(query, args)
@@ -90,6 +97,7 @@ class OptionCache:
         return cur.fetchall()
 
     def prune_expired(self) -> None:
+        """Clean up columns where exp_date is no longer valid(EDT is used)"""
         today_et = datetime.now(ZoneInfo("America/New_York")).date()
         args = {"today_et": today_et}
         query = "DELETE FROM expiration_dates WHERE exp_date < :today_et"
@@ -101,6 +109,9 @@ class OptionCache:
         self.con.commit()
 
     def is_option_chain_synced(self, symbol: str) -> bool:
+        """
+        Return whether cached option-chain data for symbol is still fresh.
+        """
         query = """
             SELECT time_to_live FROM option_chain_sync
             WHERE symbol = :symbol
@@ -113,6 +124,7 @@ class OptionCache:
         return time_to_live[0] >= self.now_edt_timestamp()
 
     def insert_option_chain(self, option_chain: OptionChain) -> None:
+        """Inserts/Updates expiration dates for a symbol"""
         query = """
             INSERT OR REPLACE INTO expiration_dates
             VALUES(:symbol, :exp_date)
@@ -124,13 +136,17 @@ class OptionCache:
         self.con.executemany(query, args)
         self.con.commit()
 
-    def sync_option_chain(self, option_chain: str) -> None:
+    def sync_option_chain(self, symbol: str) -> None:
+        """
+        Syncs a symbol for a trading day.
+        This is used for ``fetch_expiration_dates_for_symbol()``
+        """
         query = """
             INSERT OR REPLACE INTO option_chain_sync
             VALUES (:symbol, :time_to_live)
         """
         args = {
-            "symbol": option_chain,
+            "symbol": symbol,
             "time_to_live": self.next_trading_day_timestamp(),
         }
         self.con.execute(query, args)
@@ -143,9 +159,10 @@ class OptionCache:
         query = "SELECT exp_date FROM expiration_dates WHERE symbol = :symbol"
         args = {"symbol": symbol}
         cur = self.con.execute(query, args)
-        return [d[0] for d in cur.fetchall()]
+        return [d[0] for d in cur.fetchall() if d]
 
     def get_chain_id(self, symbol: str) -> str:
+        """Return chain_id from symbol returns ``""`` if no match"""
         if not self.is_option_chain_synced(symbol):
             return ""
         query = "SELECT chain_id FROM main_stock_info WHERE symbol = :symbol"
@@ -156,6 +173,7 @@ class OptionCache:
     def map_option_request_to_ids(
         self, option_request: OptionRequest
     ) -> dict[OptionRequest, list[str]]:
+        """Map an option requests back to its cached option id"""
         query_mods: list[str] = ["symbol = :symbol"]
         args: dict[str, float | str] = {"symbol": option_request.symbol}
         if option_request.exp_date:
@@ -174,6 +192,11 @@ class OptionCache:
         return {option_request: [o[0] for o in cur.fetchall() if o]}
 
     def fetch_strike_prices(self, option_request: OptionRequest) -> list[float]:
+        """
+        Returns list of strike prices as floats
+        OptionRequest can use option_type and exp_date to filter further
+        Returned list is ordered in ascending order
+        """
         query = """
             SELECT strike_price FROM option_ids
             WHERE symbol = :symbol
@@ -194,6 +217,9 @@ class OptionCache:
         option_request: OptionRequest,
         option_instruments: list[OptionInstrument],
     ):
+        """Main syncing function for option instruments"""
+        # Note for Trent: you need the dates part
+        # if the option request is symbol only
         dates: set[str] = {oi.expiration_date for oi in option_instruments}
         ttl = self.next_trading_day_timestamp()
         query = """
@@ -214,6 +240,7 @@ class OptionCache:
     def insert_option_instrument(
         self, option_instruments: list[OptionInstrument]
     ) -> None:
+        """Inserts list of option instruments into the option_ids table"""
         query = """
             INSERT OR REPLACE INTO option_ids
             VALUES(:option_id, :strike_price, :exp_date, :option_type, :symbol)
@@ -238,6 +265,9 @@ class OptionCache:
         option_request: OptionRequest,
         option_instruments: list[OptionInstrument],
     ) -> None:
+        """
+        Ensures only Symbol, and Symbol + exp_date OptionRequests are cached.
+        """
         if option_request.strike_price:
             # Do not sync anything just store the Option Instruments
             return None
@@ -249,8 +279,12 @@ class OptionCache:
         return None
 
     def is_option_request_synced(self, option_request: OptionRequest) -> bool:
-        # Cache is valid for one trading day. Narrower requests reuse
-        # that TTL instead of forcing a resync instraday
+        """
+        Checks if the current EDT timestamp is less than the TTL.
+        Cache is valid for one trading day. Narrower requests reuse
+        that TTL instead of forcing a resync intraday.
+        This will only be an issue for new options are added intraday.
+        """
         if option_request.exp_date:
             query = """
                 SELECT time_to_live FROM option_expiration_sync
