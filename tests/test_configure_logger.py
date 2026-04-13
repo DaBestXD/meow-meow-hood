@@ -30,7 +30,7 @@ class TestConfigureLogger(unittest.TestCase):
         self.assertIsInstance(self.logger.handlers[0], logging.StreamHandler)
         self.assertFalse(self.logger.propagate)
 
-    def test_none_clears_library_handlers_and_reenables_propagation(self) -> None:
+    def test_none_clears_handlers_and_reenable_propagation(self) -> None:
         configure_logger(logging.INFO, MISSING)
 
         configure_logger(logging.INFO, None)
