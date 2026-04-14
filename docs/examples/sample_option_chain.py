@@ -59,8 +59,8 @@ def format_text(op_req: OptionRequest, op_greek: OptionGreekData) -> str:
         f"{op_req.strike_price:.1f}\t",
         f"{op_greek.bid_price:.2f}\t",
         f"{op_greek.ask_price:.2f}\t",
-        f"{(op_greek.implied_volatility * 100):.2f}%",
-        f"{op_greek.open_interest}",
+        f"{(op_greek.implied_volatility * 100):.2f}%\t",
+        f"{op_greek.open_interest}\t",
     ]
     return " ".join(vals)
 
