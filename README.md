@@ -123,6 +123,14 @@ with Robinhood(enable_cache = True) as rh:
 
 ```
 
+## Example
+
+Very basic option chain display:
+
+![Brief GIF example](./docs/pictures/example.gif)
+
+Source can be found [/docs/examples/sample_option_chain.py](/docs/examples/sample_option_chain.py)
+
 ## Trust Me Bro Benchmarks
 
 Benchmark summary for 10 symbols[^benchmark-symbols] and the second nearest
