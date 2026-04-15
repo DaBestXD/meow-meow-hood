@@ -107,7 +107,7 @@ def main_loop(
                 print(
                     f"{format_text(call_req, call)} {format_text(put_req, put)}"
                 )
-            time.sleep(1)
+            time.sleep(delay)
             print("\033[2J\033[H", end="")
     except KeyboardInterrupt:
         rh.close()

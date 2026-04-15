@@ -23,6 +23,7 @@ from .api_dataclasses import (
     OptionOrder,
     OptionPosition,
     OptionRequest,
+    OrderBook,
     StockInfo,
     StockOrder,
 )
@@ -39,6 +40,7 @@ from .constants import (
     API_OPTION_ORDER_HISTORY,
     API_OPTIONS_GREEKS_DATA,
     API_OPTIONS_INSTRUMENTS,
+    API_ORDERBOOK,
     API_POSITIONS_NON_OPTIONS,
     API_POSITIONS_OPTIONS,
     API_QUOTES,
@@ -541,8 +543,12 @@ class Robinhood:
         Set raw_data to `true` if you want the raw dictionary
         back with no processing.
         """
+        if isinstance(self.user_id, int):
+            return []
         params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
         res_json = self._http_client._get(API_POSITIONS_NON_OPTIONS, params)
+        if not res_json:
+            return []
         stock_positions = [StockPosition.from_json(s) for s in res_json if s]
         return stock_positions
 
@@ -550,6 +556,8 @@ class Robinhood:
         """Returns list of OptionPosition classes"""
         params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
         res_json = self._http_client._get(API_POSITIONS_OPTIONS, params)
+        if not res_json:
+            return []
         option_positions = [
             OptionPosition.from_json(op) for op in res_json if op
         ]
@@ -559,16 +567,32 @@ class Robinhood:
         self, raw_json: bool = False
     ) -> list[OptionOrder] | list[dict[str, Any]]:
         """Set raw_json to `true` if you want the raw json response back"""
+        if isinstance(self.user_id, int):
+            return []
         params = {PARAM_ACCOUNT_NUMBER: self.user_id}
-        res_jeson = self._http_client._get(API_OPTION_ORDER_HISTORY, params)
-        option_orders = [OptionOrder.from_json(o) for o in res_jeson]
-        return option_orders if not raw_json else res_jeson
+        res_json = self._http_client._get(API_OPTION_ORDER_HISTORY, params)
+        if not res_json:
+            return []
+        option_orders = [OptionOrder.from_json(o) for o in res_json if o]
+        return option_orders if not raw_json else res_json
 
     def get_stock_order_history(
         self, raw_json: bool = False
     ) -> list[StockOrder] | list[dict[str, Any]]:
         """Set raw_json to `true` if you want the raw json response back"""
+        if isinstance(self.user_id, int):
+            return []
         params = {PARAM_ACCOUNT_NUMBER: self.user_id}
-        res_jeson = self._http_client._get(API_NON_OPTION_ORDER_HISTORY, params)
-        stock_orders = [StockOrder.from_json(s) for s in res_jeson]
-        return stock_orders if not raw_json else res_jeson
+        res_json = self._http_client._get(API_NON_OPTION_ORDER_HISTORY, params)
+        if not res_json:
+            return []
+        stock_orders = [StockOrder.from_json(s) for s in res_json if s]
+        return stock_orders if not raw_json else res_json
+
+    def get_orderbook(self, symbol: str) -> OrderBook | None:
+        si = self.get_stock_info(symbol)
+        if not si:
+            logger.warning("%s returned none", symbol)
+            return None
+        res_json = self._http_client._get(API_ORDERBOOK + f"{si.id}/")
+        return OrderBook.from_json(res_json[0])

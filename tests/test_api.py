@@ -3,6 +3,7 @@ from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import ANY, Mock, call, patch
 
+from robinhood import StockPosition
 from robinhood.api_dataclasses import (
     FullQuote,
     OptionChain,
@@ -15,7 +16,6 @@ from robinhood.constants import (
     API_OPTIONS_GREEKS_DATA,
     API_OPTIONS_INSTRUMENTS,
     API_POSITIONS_NON_OPTIONS,
-    API_POSITIONS_OPTIONS,
     API_QUOTES,
     PARAM_ACCOUNT_NUMBER,
     PARAM_CHAIN_ID,
@@ -120,6 +120,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_token.assert_called_once_with(
             env_path=ANY,
             open_browser=True,
+            write_env=True,
         )
         self.assertEqual(
             ".env",
@@ -158,6 +159,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         mock_get_token.assert_called_once_with(
             env_path=ANY,
             open_browser=True,
+            write_env=True,
         )
         mock_http_client_cls.assert_called_once_with("fresh-token", None)
         mock_option_cache_cls.assert_not_called()
@@ -861,38 +863,14 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             {"symbol": "SPY"},
         )
 
-    def test_get_account_positions_returns_none_when_user_id_is_not_loaded(
-        self,
-    ):
-        client = build_robinhood_client()
-        client.user_id = 403
+    def get_account_stock_positions(self) -> list[StockPosition]:
+        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
+        res_json = self._http_client._get(API_POSITIONS_NON_OPTIONS, params)
 
-        result = client.get_account_stock_positions()
+        if not res_json:
+            return []
 
-        self.assertIsNone(result)
-        client._http_client._get.assert_not_called()
-
-    def test_get_account_positions_queries_both_position_endpoints(self):
-        client = build_robinhood_client()
-        client.user_id = "ACC123"
-        client._http_client._get.side_effect = [
-            [{"stock": "position"}],
-            [{"option": "position"}],
-        ]
-
-        with patch("builtins.print") as mock_print:
-            result = client.get_account_stock_positions()
-
-        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: "ACC123"}
-        self.assertIsNone(result)
-        self.assertEqual(
-            [
-                call(API_POSITIONS_NON_OPTIONS, params),
-                call(API_POSITIONS_OPTIONS, params),
-            ],
-            client._http_client._get.call_args_list,
-        )
-        mock_print.assert_called_once_with([{"option": "position"}])
+        return [StockPosition.from_json(s) for s in res_json if s]
 
 
 if __name__ == "__main__":

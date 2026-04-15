@@ -303,7 +303,9 @@ class TestOptionCache(unittest.TestCase):
             cache.sync_option_chain("SPY")
 
         with patch.object(OptionCache, "now_edt_timestamp", return_value=1000):
-            self.assertTrue(cache.is_option_request_synced(OptionRequest(symbol="SPY")))
+            self.assertTrue(
+                cache.is_option_request_synced(OptionRequest(symbol="SPY"))
+            )
 
         with patch.object(OptionCache, "now_edt_timestamp", return_value=3000):
             self.assertFalse(

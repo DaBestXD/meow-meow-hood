@@ -349,3 +349,29 @@ class OptionOrder(ApiPayloadMixin):
         ]
 
         return cls(**data)
+
+
+@dataclass(slots=True)
+class bid_ask:
+    side: Literal["bid", "ask"]
+    price: float
+    quanity: int
+
+
+@dataclass(frozen=True, slots=True)
+class OrderBook:
+    asks: list[bid_ask]
+    bids: list[bid_ask]
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Self:
+        data = {}
+        data["asks"] = [
+            bid_ask(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
+            for b in payload["asks"]
+        ]
+        data["bids"] = [
+            bid_ask(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
+            for b in payload["bids"]
+        ]
+        return cls(**data)
