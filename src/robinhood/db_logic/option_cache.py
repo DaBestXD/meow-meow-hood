@@ -36,6 +36,7 @@ class OptionCache:
 
     def close(self) -> None:
         self.con.close()
+        logger.debug("Option Cache Closed")
 
     def init_db(self) -> None:
         self.con.execute(MAIN_TABLE)
@@ -46,6 +47,7 @@ class OptionCache:
         self.con.execute(OPTION_CHAIN_SYNC_TABLE)
         self.con.execute(OPTION_IDS_INDEX)
         self.con.commit()
+        logger.debug("Option Cache Initialized")
 
     @staticmethod
     def next_trading_day_timestamp() -> int:

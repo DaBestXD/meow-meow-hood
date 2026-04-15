@@ -13,8 +13,19 @@ from .constants import (
     OPTION_GREEK_DATA_NON_FLOAT_KEYS,
     OPTION_INSTRUMENT_FLOAT_KEYS,
     OPTION_INSTRUMENT_NON_FLOAT_KEYS,
+    OPTION_ORDER_FLOAT_KEYS,
+    OPTION_ORDER_LEG_FLOAT_KEYS,
+    OPTION_ORDER_LEG_INT_KEYS,
+    OPTION_ORDER_LEG_NON_FLOAT_KEYS,
+    OPTION_ORDER_NON_FLOAT_KEYS,
+    OPTION_POSITION_FLOAT_KEYS,
+    OPTION_POSITION_NON_FLOAT_KEYS,
     STOCK_INFO_FLOAT_KEYS,
     STOCK_INFO_NON_FLOAT_KEYS,
+    STOCK_ORDER_FLOAT_KEYS,
+    STOCK_ORDER_NON_FLOAT_KEYS,
+    STOCK_POSITION_FLOAT_KEYS,
+    STOCK_POSITION_NON_FLOAT_KEYS,
 )
 
 
@@ -213,3 +224,128 @@ class StockInfo(ApiPayloadMixin):
     short_selling_tradability: str
     _NON_FLOAT_KEYS: ClassVar[set[str]] = STOCK_INFO_NON_FLOAT_KEYS
     _FLOAT_KEYS: ClassVar[set[str]] = STOCK_INFO_FLOAT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class StockPosition(ApiPayloadMixin):
+    symbol: str
+    quantity: float
+    type: str
+    clearing_average_cost: float
+    instrument_id: str
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = STOCK_POSITION_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = STOCK_POSITION_FLOAT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class OptionPosition(ApiPayloadMixin):
+    account: str
+    account_number: str
+    average_price: float
+    chain_id: str
+    chain_symbol: str
+    clearing_cost_basis: float
+    clearing_direction: str
+    clearing_intraday_cost_basis: float
+    clearing_intraday_direction: str
+    clearing_intraday_running_quantity: float
+    clearing_running_quantity: float
+    created_at: str
+    expiration_date: str
+    id: str
+    intraday_average_open_price: float
+    intraday_quantity: float
+    opened_at: str
+    option: str
+    option_id: str
+    pending_assignment_quantity: float
+    pending_buy_quantity: float
+    pending_exercise_quantity: float
+    pending_expiration_quantity: float
+    pending_expired_quantity: float
+    pending_sell_quantity: float
+    quantity: float
+    trade_value_multiplier: float
+    type: str
+    updated_at: str
+    url: str
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_POSITION_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_POSITION_FLOAT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class StockOrder(ApiPayloadMixin):
+    id: str
+    instrument_id: str
+    side: str
+    type: str
+    state: str
+    quantity: float
+    average_price: float
+    price: float
+    fees: float
+    created_at: str
+    updated_at: str
+    last_transaction_at: str | None
+
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = STOCK_ORDER_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = STOCK_ORDER_FLOAT_KEYS
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Self:
+        data = ApiPayloadMixin._filter_dict(
+            payload,
+            cls._NON_FLOAT_KEYS,
+            cls._FLOAT_KEYS,
+            cls._INT_KEYS,
+        )
+        total_notional = payload.get("total_notional") or {}
+        data["price"] = float(total_notional.get("amount", 0.0) or 0.0)
+        return cls(**data)
+
+
+@dataclass(frozen=True, slots=True)
+class OptionOrderLeg(ApiPayloadMixin):
+    side: str
+    expiration_date: str
+    option_type: str
+    strike_price: float
+    ratio_quantity: int
+
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_LEG_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_LEG_FLOAT_KEYS
+    _INT_KEYS: ClassVar[set[str]] = OPTION_ORDER_LEG_INT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class OptionOrder(ApiPayloadMixin):
+    id: str
+    chain_symbol: str
+    direction: str
+    strategy: str | None
+    state: str
+    quantity: float
+    price: float
+    created_at: str
+    updated_at: str
+    legs: list[OptionOrderLeg]
+
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_FLOAT_KEYS
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Self:
+        data = ApiPayloadMixin._filter_dict(
+            payload,
+            cls._NON_FLOAT_KEYS,
+            cls._FLOAT_KEYS,
+            cls._INT_KEYS,
+        )
+
+        data["price"] = float(payload.get("net_amount", 0.0) or 0.0)
+
+        data["legs"] = [
+            OptionOrderLeg.from_json(leg) for leg in payload.get("legs", [])
+        ]
+
+        return cls(**data)

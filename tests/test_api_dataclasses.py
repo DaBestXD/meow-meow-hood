@@ -1,7 +1,12 @@
 import unittest
 from dataclasses import asdict
 
-from robinhood.api_dataclasses import FullQuote, OptionGreekData, StockInfo
+from robinhood.api_dataclasses import (
+    FullQuote,
+    OptionGreekData,
+    StockInfo,
+    StockPosition,
+)
 from tests.support import build_option_greek_data
 
 
@@ -72,6 +77,26 @@ class TestApiDataclasses(unittest.TestCase):
         self.assertEqual(11, quote.ask_size)
         self.assertEqual(9, quote.bid_size)
         self.assertEqual(0.0, quote.last_trade_price)
+
+    def test_stock_position_from_json_keeps_selected_fields(self):
+        payload = {
+            "symbol": "TQQQ",
+            "quantity": "0.92278000",
+            "type": "long",
+            "clearing_average_cost": "27.83",
+            "instrument_id": "91f7ea28-e413-4ca4-b9fa-91f5822f8b8d",
+        }
+
+        position = StockPosition.from_json(payload)
+
+        self.assertEqual("TQQQ", position.symbol)
+        self.assertEqual(0.92278, position.quantity)
+        self.assertEqual("long", position.type)
+        self.assertEqual(27.83, position.clearing_average_cost)
+        self.assertEqual(
+            "91f7ea28-e413-4ca4-b9fa-91f5822f8b8d",
+            position.instrument_id,
+        )
 
 
 if __name__ == "__main__":

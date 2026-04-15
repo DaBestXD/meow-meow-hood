@@ -16,6 +16,11 @@ API_OPTION_CHAINS = "/options/chains/"
 API_MARKET_DATA = "/marketdata/"
 API_OPTIONS_GREEKS_DATA = "/marketdata/options/"
 API_QUOTES = "/quotes/"
+API_POSITIONS_NON_OPTIONS = "/positions/"
+API_POSITIONS_OPTIONS = "/options/positions/"
+API_NON_OPTION_ORDER_HISTORY = "/orders/"
+API_OPTION_ORDER_HISTORY = "/options/orders/"
+PARAM_ACCOUNT_NUMBER = "account_number"
 PARAM_SYMBOLS = "symbols"
 PARAM_OPTION_TYPE = "type"
 PARAM_ID = "ids"
@@ -26,6 +31,7 @@ PARAM_TRADABLE_CHAIN_ID = "tradable_chain_id"
 PARAM_CHAIN_ID = "chain_id"
 PARAM_EXPIRATION_DATE = "expiration_dates"
 PARAM_LIMIT = "page_size"
+PARAM_NON_ZERO = "nonzero"
 MAX_LIMIT = 100
 DEFAULT_DB_PATH = Path("./").resolve().parent
 DEFAULT_ENV_PATH = Path("./").resolve().parent
@@ -49,6 +55,15 @@ STOCK_INFO_FLOAT_KEYS = {
     "maintenance_ratio",
     "day_trade_ratio",
     "min_tick_size",
+}
+STOCK_POSITION_NON_FLOAT_KEYS = {
+    "symbol",
+    "type",
+    "instrument_id",
+}
+STOCK_POSITION_FLOAT_KEYS = {
+    "quantity",
+    "clearing_average_cost",
 }
 OPTION_GREEK_DATA_NON_FLOAT_KEYS = {
     "instrument",
@@ -154,4 +169,84 @@ OPTION_INSTRUMENT_NON_FLOAT_KEYS = {
 }
 OPTION_INSTRUMENT_FLOAT_KEYS = {
     "strike_price",
+}
+
+OPTION_POSITION_NON_FLOAT_KEYS = {
+    "account",
+    "account_number",
+    "chain_id",
+    "chain_symbol",
+    "clearing_direction",
+    "clearing_intraday_direction",
+    "created_at",
+    "expiration_date",
+    "id",
+    "opened_at",
+    "option",
+    "option_id",
+    "type",
+    "updated_at",
+    "url",
+}
+
+OPTION_POSITION_FLOAT_KEYS = {
+    "average_price",
+    "clearing_cost_basis",
+    "clearing_intraday_cost_basis",
+    "clearing_intraday_running_quantity",
+    "clearing_running_quantity",
+    "intraday_average_open_price",
+    "intraday_quantity",
+    "pending_assignment_quantity",
+    "pending_buy_quantity",
+    "pending_exercise_quantity",
+    "pending_expiration_quantity",
+    "pending_expired_quantity",
+    "pending_sell_quantity",
+    "quantity",
+    "trade_value_multiplier",
+}
+STOCK_ORDER_NON_FLOAT_KEYS = {
+    "id",
+    "instrument_id",
+    "side",
+    "type",
+    "state",
+    "created_at",
+    "updated_at",
+    "last_transaction_at",
+}
+
+STOCK_ORDER_FLOAT_KEYS = {
+    "quantity",
+    "average_price",
+    "fees",
+}
+OPTION_ORDER_LEG_NON_FLOAT_KEYS = {
+    "side",
+    "expiration_date",
+    "option_type",
+}
+
+OPTION_ORDER_LEG_FLOAT_KEYS = {
+    "strike_price",
+}
+
+OPTION_ORDER_LEG_INT_KEYS = {
+    "ratio_quantity",
+}
+
+
+OPTION_ORDER_NON_FLOAT_KEYS = {
+    "id",
+    "chain_symbol",
+    "direction",
+    "state",
+    "strategy",
+    "created_at",
+    "updated_at",
+}
+
+OPTION_ORDER_FLOAT_KEYS = {
+    "quantity",
 }

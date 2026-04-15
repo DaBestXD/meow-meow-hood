@@ -21,3 +21,5 @@
 - Add futures buying/selling endpoint
 
 - Add support for robinhood stock screener
+
+- Swap to AIO-HTTP

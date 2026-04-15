@@ -45,6 +45,17 @@ class TestRobinhoodHTTPClient(unittest.TestCase):
             session.get.call_args_list,
         )
 
+    def test_page_get_returns_empty_list_on_error_response(self):
+        session = Mock()
+        session.get.return_value = Mock(status_code=429)
+        client = build_http_client(session=session)
+        client._error_status_code_handler = Mock()
+
+        result = client._page_get("page-2", [{"id": 1}])
+
+        self.assertEqual([], result)
+        client._error_status_code_handler.assert_called_once_with("page-2", 429)
+
     def test_get_returns_results_from_single_page_payload(self):
         session = Mock()
         session.get.return_value = Mock(
@@ -124,6 +135,35 @@ class TestRobinhoodHTTPClient(unittest.TestCase):
         result = client._get("/quotes/")
 
         self.assertEqual([], result)
+
+    def test_error_status_code_handler_sleeps_on_429(self):
+        client = build_http_client()
+
+        with patch("robinhood._http_client.time.sleep") as mock_sleep:
+            client._error_status_code_handler("/quotes/", 429)
+
+        mock_sleep.assert_called_once_with(65)
+
+    def test_error_status_code_handler_logs_critical_on_403(self):
+        client = build_http_client()
+
+        with self.assertLogs(
+            "robinhood._http_client", level="CRITICAL"
+        ) as logs:
+            client._error_status_code_handler("/quotes/", 403)
+
+        self.assertIn(
+            "Access token invalid, relogin into robinhood",
+            logs.output[0],
+        )
+
+    def test_close_closes_underlying_session(self):
+        session = Mock()
+        client = build_http_client(session=session)
+
+        client.close()
+
+        session.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

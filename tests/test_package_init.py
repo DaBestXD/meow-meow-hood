@@ -1,4 +1,5 @@
 import importlib
+import importlib.metadata as metadata
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +11,16 @@ class TestPackageInit(unittest.TestCase):
         with patch("importlib.metadata.version", return_value="9.9.9"):
             importlib.reload(robinhood)
             self.assertEqual("9.9.9", robinhood.__version__)
+
+        importlib.reload(robinhood)
+
+    def test_package_version_falls_back_when_distribution_is_missing(self):
+        with patch(
+            "importlib.metadata.version",
+            side_effect=metadata.PackageNotFoundError,
+        ):
+            importlib.reload(robinhood)
+            self.assertEqual("0.0.0", robinhood.__version__)
 
         importlib.reload(robinhood)
 

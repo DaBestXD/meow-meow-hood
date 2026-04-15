@@ -23,6 +23,7 @@ from .api_dataclasses import (
     OptionInstrument,
     OptionRequest,
     StockInfo,
+    StockPosition,
 )
 from .robinhood_api_logic import Robinhood
 
@@ -38,5 +39,6 @@ __all__ = [
     "OptionGreekData",
     "FullQuote",
     "StockInfo",
+    "StockPosition",
     "__version__",
 ]

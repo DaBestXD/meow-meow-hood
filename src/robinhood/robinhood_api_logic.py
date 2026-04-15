@@ -9,6 +9,7 @@ from typing import Any, overload
 
 from dotenv import load_dotenv
 
+from robinhood import StockPosition
 from robinhood.configure_logger import MISSING, configure_logger
 from robinhood.db_logic.option_cache import OptionCache
 from robinhood.set_up_script import set_up
@@ -19,22 +20,33 @@ from .api_dataclasses import (
     OptionChain,
     OptionGreekData,
     OptionInstrument,
+    OptionPosition,
     OptionRequest,
     StockInfo,
+    StockOrder,
+    OptionOrder,
 )
 from .browser_token_parser import (
+    Browser,
+    auto_open_browser,
     get_acc_id,
     get_token,
 )
 from .constants import (
     API_INSTRUMENTS,
+    API_NON_OPTION_ORDER_HISTORY,
     API_OPTION_CHAINS,
+    API_OPTION_ORDER_HISTORY,
     API_OPTIONS_GREEKS_DATA,
     API_OPTIONS_INSTRUMENTS,
+    API_POSITIONS_NON_OPTIONS,
+    API_POSITIONS_OPTIONS,
     API_QUOTES,
+    PARAM_ACCOUNT_NUMBER,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
     PARAM_ID,
+    PARAM_NON_ZERO,
     PARAM_OPTION_IDS,
     PARAM_OPTION_STATE,
     PARAM_OPTION_STRIKE_PRICE,
@@ -59,11 +71,12 @@ class Robinhood:
         *,
         config_path: str | os.PathLike[str] = Path.cwd(),
         extract_token: bool = True,
+        write_env: bool = True,
         open_browser: bool = True,
         user_agent: str | None = None,
         enable_cache: bool = True,
         prune_expired_options: bool = True,
-        logging_level: int = logging.INFO,
+        logging_level: int | None = logging.INFO,
         log_handler: logging.Handler | None | object = MISSING,
         access_token: str | None = None,
     ) -> None:
@@ -117,9 +130,11 @@ class Robinhood:
                 token, self.user_id = get_token(
                     env_path=self.env_path,
                     open_browser=open_browser,
+                    write_env=write_env,
                 )
             assert token, "Bearer token cannot be none."
         self._http_client = RobinhoodHTTPClient(token, user_agent)
+        logger.info("Robinhood Client Initialized")
 
     def __enter__(self) -> Robinhood:
         return self
@@ -138,13 +153,14 @@ class Robinhood:
             self._db_cache.close()
             self._db_cache = None
         self._http_client.close()
+        logger.info("Robinhood Client Closed")
 
     def get_expiration_dates(self, symbol: str) -> list[str] | None:
         """
         Returns option_expiration dates for a given symbol as
         a list of strings, date format in yyyy-mm-dd
         """
-        if self._db_cache and self._db_cache.is_option_chain_synced:
+        if self._db_cache and self._db_cache.is_option_chain_synced(symbol):
             dates = self._db_cache.fetch_expiration_dates_for_symbol(symbol)
             if dates:
                 logger.debug(
@@ -428,6 +444,7 @@ class Robinhood:
         if self._db_cache:
             for c in return_val:
                 self._db_cache.insert_option_chain(c)
+                self._db_cache.sync_option_chain(c.symbol)
         return return_val if len(return_val) > 1 else return_val[0]
 
     def _get_option_greek_data(
@@ -472,6 +489,12 @@ class Robinhood:
                 continue
             cached_requests.append(r)
             req_to_ids.update(self._db_cache.map_option_request_to_ids(r))
+        if cached_requests:
+            logger.debug(
+                "%s cache hit for %s",
+                self.get_option_greeks_batch_request.__name__,
+                ", ".join(dict.fromkeys(r.symbol for r in cached_requests)),
+            )
         return_val = self._resolve_option_greeks_from_ids(
             cached_requests, req_to_ids
         )
@@ -481,7 +504,7 @@ class Robinhood:
             )
         return return_val
 
-    def refresh_access_token(self) -> None:
+    def refresh_access_token(self, browser: Browser) -> None:
         """
         This function should only need to be run once a week.
         In theory as long as you keep running this function it should
@@ -490,6 +513,7 @@ class Robinhood:
         pkill/taskKill is the easiest way to clean up the open browser
         though not ideal as it closes all the entire browser.
         """
+        auto_open_browser(browser)
         if not self.env_path:
             logger.warning("No env path was provided. Not writing to env")
             token, _ = get_token("", write_env=False)
@@ -510,3 +534,41 @@ class Robinhood:
             return None
         else:
             return self._db_cache.execute_query_with_args(query, args)
+
+    def get_account_stock_positions(self) -> list[StockPosition]:
+        """
+        Returns list of StockPosition classes
+        Set raw_data to `true` if you want the raw dictionary
+        back with no processing.
+        """
+        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
+        res_json = self._http_client._get(API_POSITIONS_NON_OPTIONS, params)
+        stock_positions = [StockPosition.from_json(s) for s in res_json if s]
+        return stock_positions
+
+    def get_account_option_positions(self) -> list[OptionPosition]:
+        """Returns list of OptionPosition classes"""
+        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
+        res_json = self._http_client._get(API_POSITIONS_OPTIONS, params)
+        option_positions = [
+            OptionPosition.from_json(op) for op in res_json if op
+        ]
+        return option_positions
+
+    def get_option_order_history(
+        self, raw_json: bool = False
+    ) -> list[OptionOrder] | list[dict[str, Any]]:
+        """Set raw_json to `true` if you want the raw json response back"""
+        params = {PARAM_ACCOUNT_NUMBER: self.user_id}
+        res_jeson = self._http_client._get(API_OPTION_ORDER_HISTORY, params)
+        option_orders = [OptionOrder.from_json(o) for o in res_jeson]
+        return option_orders if not raw_json else res_jeson
+
+    def get_stock_order_history(
+        self, raw_json: bool = False
+    ) -> list[StockOrder] | list[dict[str, Any]]:
+        """Set raw_json to `true` if you want the raw json response back"""
+        params = {PARAM_ACCOUNT_NUMBER: self.user_id}
+        res_jeson = self._http_client._get(API_NON_OPTION_ORDER_HISTORY, params)
+        stock_orders = [StockOrder.from_json(s) for s in res_jeson]
+        return stock_orders if not raw_json else res_jeson

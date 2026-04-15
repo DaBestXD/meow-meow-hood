@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Any
 
 import requests
 
@@ -24,9 +25,11 @@ class RobinhoodHTTPClient:
         self.session.headers["Authorization"] = f"Bearer {token}"
         if user_agent:
             self.session.headers["User-Agent"] = user_agent
+        logger.debug("RobinhoodHTTPClient Initialized")
 
     def close(self) -> None:
         self.session.close()
+        logger.debug("RobinhoodHTTPClient Closed")
 
     def _error_status_code_handler(
         self, endpoint: str, status_code: int
@@ -38,7 +41,7 @@ class RobinhoodHTTPClient:
         if status_code == 429:
             logger.warning("HTTP 429 returned, sleeping for 65 seconds...")
             time.sleep(65)
-        if status_code == 403:
+        if status_code == 403 or status_code == 401:
             # TODO raise error here
             logger.critical("Access token invalid, relogin into robinhood")
         else:
@@ -47,6 +50,9 @@ class RobinhoodHTTPClient:
 
     def _page_get(self, endpoint: str, results: list[dict]) -> list[dict]:
         while True:
+            logger.debug(
+                "GET request: %s, %s", endpoint, self._page_get.__name__
+            )
             res = self.session.get(url=endpoint)
             if res.status_code != 200:
                 self._error_status_code_handler(endpoint, res.status_code)
@@ -61,15 +67,16 @@ class RobinhoodHTTPClient:
     def _get(
         self,
         endpoint: str,
-        params: dict | None = None,
-    ) -> list[dict]:
+        params: dict[str, Any] | None = None,
+        base_api_link: str = BASE_API_LINK,
+    ) -> list[dict[str, Any]]:
         logger.debug(
             "GET request: %s, Params length: %d",
             endpoint,
             len(params) if params else 0,
         )
         res = self.session.get(
-            url=BASE_API_LINK + endpoint, params=params, timeout=5
+            url=base_api_link + endpoint, params=params, timeout=5
         )
         if res.status_code != 200:
             self._error_status_code_handler(endpoint, res.status_code)

@@ -123,7 +123,7 @@ def _chrome_db_parse(f: Path) -> str | None:
     Current parser uses the robinhood leveldb folder
     and the reads the log file for the bearer token.
     Incase of chrome profile recursively call the function twice
-    File path: IndexedDB --> robinhood.leveldb dir --> 0000X.log file
+    File path: IndexedDB --> robinhood.leveldb dir --> 00XXX.log file
     """
     for n in f.iterdir():
         if ".log" not in n.name:
@@ -146,7 +146,7 @@ def _chrome_db_parse(f: Path) -> str | None:
                         continue
                     if payload.get("exp", 0) > int(time.time()):
                         return t
-                return None
+            return None
         except FileNotFoundError:
             return None
 
@@ -193,9 +193,7 @@ def get_token(
         if not bearer_token:
             continue
         account_number = get_acc_id(bearer_token)
-        if isinstance(account_number, int):
-            continue
-        else:
+        if isinstance(account_number, str):
             break
 
     assert bearer_token, """
