@@ -20,11 +20,11 @@ from .api_dataclasses import (
     OptionChain,
     OptionGreekData,
     OptionInstrument,
+    OptionOrder,
     OptionPosition,
     OptionRequest,
     StockInfo,
     StockOrder,
-    OptionOrder,
 )
 from .browser_token_parser import (
     Browser,

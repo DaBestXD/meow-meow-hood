@@ -12,8 +12,8 @@ A Robinhood API wrapper for fast option market data
 ## Why?
 
 If you're using Robinhood as a broker still...\
-And if you want to view option market data at a reasonable speed.
-This was made for fun.
+And if you want to view option market data at a reasonable speed.\
+🐈This was made for fun🐈
 
 ## Authentication
 
@@ -22,16 +22,18 @@ Ensure you are logged in locally to Robinhood on either:
 - Chrome
 - Firefox
 
-It works by extracting a locally stored access token from your browser data.\
+Auth works by extracting a locally stored access token from your browser data.
 By default the client automatically checks Chrome first and then Firefox for a
-valid token.\
-If a stored token is rejected and `open_browser=True`, the refresh helper may
-briefly open the installed browsers to refresh auth state.\
-This behavior can be disabled on class creation with `extract_token=False`.\
+valid token.
+If a stored token is fails auth and `open_browser=True`, it will attempt to
+retrieve a fresh token by opening both Firefox and Chrome for a short period then
+close them( Warning this will break if Chrome/Firefox are already opened)
+This can be disabled on class creation with `extract_token=False`.
+
 You will need to pass in the access token manually if token extraction is
-disabled.\
-Config folder is created at the cwd labeled `.meow-meow-hood`.\
-If cache enabled db file is placed inside this folder. Same for extract_token.
+disabled.
+Config folder is created at the current working directory labeled `.meow-meow-hood`.
+Any files created(cache and env) are placed inside the config folder.
 
 ```python
 Robinhood(extract_token=False, access_token="...")
@@ -130,11 +132,28 @@ Very basic option chain display:
 ![Brief GIF example](./docs/pictures/example.gif)
 
 Source can be found [/docs/examples/sample_option_chain.py](/docs/examples/sample_option_chain.py)
+To run use
+
+```
+uv run docs/examples/sample_option_chain.py
+or
+python docs/examples/sample_option_chain.py
+Args:
+-s str[symbol] -d int[index for a list of dates] -r int[option range] -de int[delay]
+Default with no args:
+"SPY", 0(Nearest expiration date), 10(10 calls/puts based on stock price), 0.25(Seconds)
+```
 
 ## Trust Me Bro Benchmarks
 
 Benchmark summary for 10 symbols[^benchmark-symbols] and the second nearest
-expiration date across 10 runs(~1.6k options returned per run).
+expiration date across 10 runs(~1.6k options returned per run).\
+*Network jitter will greatly affect the results but the cache will
+always greatly reduce the time to get data back*
+
+`uv run -m benchmarks.benchmark_api_requests`
+or
+`python -m benchmarks.benchmark_api_requests`
 
 | Metric | Cold Cache | Warm Cache | Improvement |
 | --- | ---: | ---: | ---: |
@@ -143,8 +162,8 @@ expiration date across 10 runs(~1.6k options returned per run).
 | Average `get_option_greeks_batch_request` time | 3.48793s | 1.18787s | 65.94% |
 | Average total time per run | 7.33413s | 1.19204s | 83.75% |
 
-`Cold cache` represents a run without any cached option data. `Warm cache`
-represents a run with cache hits.
+`Cold cache` represents a run without any cached option data.
+`Warm cache` represents a run with cache hits.
 
 [^benchmark-symbols]: SPY, TSLA, QQQ, NVDA, GOOG, MSFT, AMZN, TSM, META, JPM
 

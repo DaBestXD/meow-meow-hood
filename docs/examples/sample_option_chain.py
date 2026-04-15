@@ -8,9 +8,10 @@ from robinhood.api_dataclasses import OptionGreekData
 
 def cmd_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(__name__)
-    parser.add_argument("-s", "--symbol", type=str)
-    parser.add_argument("-d", "--date", type=int)
-    parser.add_argument("-r", "--range", type=int)
+    parser.add_argument("-s", "--symbol", type=str, default="SPY")
+    parser.add_argument("-d", "--date", type=int, default=0)
+    parser.add_argument("-r", "--range", type=int, default=10)
+    parser.add_argument("-de", "--delay", type=float, default=0.25)
     return parser.parse_args()
 
 
@@ -27,10 +28,17 @@ def main() -> None:
     symbol = str(args.symbol).upper()
     selected_date = return_date(rh, symbol, int(args.date))
     strikes = rh.get_strike_prices(symbol=symbol, exp_date=selected_date)
-    main_loop(rh, [*strikes.values()], symbol, int(args.range), selected_date)
+    main_loop(
+        rh,
+        [*strikes.values()],
+        symbol,
+        int(args.range),
+        selected_date,
+        args.delay,
+    )
 
 
-def placeholder(
+def option_range(
     quote_price: float,
     strikes: list[float],
     symbol: str,
@@ -60,7 +68,7 @@ def format_text(op_req: OptionRequest, op_greek: OptionGreekData) -> str:
         f"{op_greek.bid_price:.2f}\t",
         f"{op_greek.ask_price:.2f}\t",
         f"{(op_greek.implied_volatility * 100):.2f}%\t",
-        f"{op_greek.open_interest}\t",
+        f"{op_greek.volume}\t",
     ]
     return " ".join(vals)
 
@@ -71,6 +79,7 @@ def main_loop(
     symbol: str,
     strike_range: int,
     date: str,
+    delay: float,
 ) -> None:
     try:
         print("\033[2J\033[H", end="")
@@ -78,7 +87,7 @@ def main_loop(
             quote = rh.get_stock_quotes(symbol)
             if not quote:
                 return None
-            call_side, put_side = placeholder(
+            call_side, put_side = option_range(
                 quote.last_trade_price,
                 strikes[0],
                 symbol,
@@ -88,7 +97,10 @@ def main_loop(
             total_list = call_side + put_side
             vals = rh.get_option_greeks_batch_request(total_list)
             print(f"{symbol} price: {quote.last_trade_price} exp_date: {date}")
-            print("Call\t Bid\t Ask\t IV\t OI\t Put\t Bid\t Ask\t IV\t OI")
+            print(f"{delay=}")
+            print(
+                "Call\t Bid\t Ask\t IV\t Volume\t Put\t Bid\t Ask\t IV\t Volume"
+            )
             for i in range(len(call_side)):
                 call_req, put_req = call_side[i], put_side[i]
                 call, put = vals[call_req][0], vals[put_req][0]
