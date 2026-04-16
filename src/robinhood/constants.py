@@ -21,6 +21,9 @@ API_POSITIONS_NON_OPTIONS = "/positions/"
 API_POSITIONS_OPTIONS = "/options/positions/"
 API_NON_OPTION_ORDER_HISTORY = "/orders/"
 API_OPTION_ORDER_HISTORY = "/options/orders/"
+API_WATCHLIST_DEFAULT = "/discovery/lists/default/"
+API_WATCHLIST = "/discovery/lists/"
+API_WATCHLIST_ITEMS = "/discovery/lists/items/"
 PARAM_ACCOUNT_NUMBER = "account_number"
 PARAM_SYMBOLS = "symbols"
 PARAM_OPTION_TYPE = "type"
@@ -32,6 +35,8 @@ PARAM_TRADABLE_CHAIN_ID = "tradable_chain_id"
 PARAM_CHAIN_ID = "chain_id"
 PARAM_EXPIRATION_DATE = "expiration_dates"
 PARAM_LIMIT = "page_size"
+PARAM_LIST_ID = "list_id"
+PARAM_LOAD_ALL_ATTRIBUTES = "load_all_attributes"
 PARAM_NON_ZERO = "nonzero"
 MAX_LIMIT = 100
 DEFAULT_DB_PATH = Path("./").resolve().parent
@@ -251,3 +256,38 @@ OPTION_ORDER_NON_FLOAT_KEYS = {
 OPTION_ORDER_FLOAT_KEYS = {
     "quantity",
 }
+
+OPTION_STRATEGY_NON_FLOAT_KEYS = {
+    "object_id",
+    "open_price_direction",
+    "name",
+    "chain_symbol",
+}
+
+FUTURE_NON_FLOAT_KEYS = {"symbol", "object_id", "name"}
+FUTURE_FLOAT_KEYS = {"future_margin_requirement"}
+INDEX_NON_FLOAT_KEYS = {"name", "symbol", "object_id"}
+INDEX_FLOAT_KEYS = {
+    "high",
+    "low",
+    "high_52_weeks",
+    "low_52_weeks",
+}
+INSTRUMENTS_FLOAT_KEYS = {
+    "high",
+    "low",
+    "average_volume",
+    "volume",
+    "high_52_weeks",
+    "low_52_weeks",
+    "market_cap",
+    "pe_ratio",
+}
+INSTRUMENTS_NON_FLOAT_KEYS = {
+    "name",
+    "symbol",
+    "object_id",
+}
+
+CURRENCY_PAIR_NON_FLOAT_KEYS = {"name", "symbol", "object_id"}
+CURRENCY_PAIR_FLOAT_KEYS = {"market_cap", "high_52_weeks", "low_52_weeks"}

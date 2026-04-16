@@ -5,7 +5,6 @@ from typing import Any
 import requests
 
 from .constants import (
-    BASE_API_BONFIRE_LINK,
     BASE_API_LINK,
     MAX_LIMIT,
     PARAM_LIMIT,
@@ -45,7 +44,7 @@ class RobinhoodHTTPClient:
             # TODO raise error here
             logger.critical("Access token invalid, relogin into robinhood")
         else:
-            logger.debug("%s returned: %d", endpoint, status_code)
+            logger.warning("%s returned: %d", endpoint, status_code)
         return None
 
     def _page_get(self, endpoint: str, results: list[dict]) -> list[dict]:
@@ -90,10 +89,22 @@ class RobinhoodHTTPClient:
             return res_json.get(RESULTS, [res_json])
         return self._page_get(next_link, results=res_json.get(RESULTS, []))
 
-    def _post(self, endpoint: str, data: dict | None = None) -> dict | None:
-        raise NotImplementedError
-        res = self.session.post(url=BASE_API_BONFIRE_LINK + endpoint, json=data)
+    def _post(
+        self,
+        endpoint: str,
+        base_api_link: str,
+        data: dict | None = None,
+    ) -> dict | None:
+        res = self.session.post(url=base_api_link + endpoint, json=data)
+        logger.debug(
+            "POST request: %s, data length: %d",
+            endpoint,
+            len(data) if data else 0,
+        )
         if res.status_code != 200:
-            print(res.status_code)
+            self._error_status_code_handler(endpoint, res.status_code)
             return None
         return res.json()
+
+    def _delete(self):
+        raise NotImplementedError

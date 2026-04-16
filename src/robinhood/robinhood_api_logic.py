@@ -26,6 +26,11 @@ from .api_dataclasses import (
     OrderBook,
     StockInfo,
     StockOrder,
+    WatchList,
+    OptionStrategy,
+    Instrument,
+    Future,
+    CurrencyPair,
 )
 from .browser_token_parser import (
     Browser,
@@ -44,6 +49,8 @@ from .constants import (
     API_POSITIONS_NON_OPTIONS,
     API_POSITIONS_OPTIONS,
     API_QUOTES,
+    API_WATCHLIST_DEFAULT,
+    API_WATCHLIST_ITEMS,
     PARAM_ACCOUNT_NUMBER,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
@@ -55,6 +62,9 @@ from .constants import (
     PARAM_OPTION_TYPE,
     PARAM_SYMBOLS,
     PARAM_TRADABLE_CHAIN_ID,
+    API_WATCHLIST,
+    PARAM_LIST_ID,
+    PARAM_LOAD_ALL_ATTRIBUTES,
 )
 from .option_matching import map_option_requests_to_ois, match_req_to_oi
 
@@ -596,3 +606,45 @@ class Robinhood:
             return None
         res_json = self._http_client._get(API_ORDERBOOK + f"{si.id}/")
         return OrderBook.from_json(res_json[0])
+
+    def get_watchlists(self) -> list[WatchList] | None:
+        res_json = self._http_client._get(API_WATCHLIST_DEFAULT)
+        if not res_json:
+            return None
+        watchlists: list[WatchList] = []
+        for s in res_json:
+            items = self._watchlist_helper(s["id"])
+            watchlists.append(
+                WatchList(name=s["display_name"], id=s["id"], items=items)
+            )
+        if not watchlists:
+            logger.warning("No watchlists were found.")
+            return None
+        return watchlists
+
+    def _watchlist_helper(
+        self, id: str
+    ) -> list[OptionStrategy | Instrument | Future | CurrencyPair]:
+        params = {
+            PARAM_LIST_ID: id,
+            PARAM_LOAD_ALL_ATTRIBUTES: "False",
+        }
+        res_json = self._http_client._get(API_WATCHLIST_ITEMS, params)
+        if not res_json:
+            return []
+        items: list[OptionStrategy | Instrument | Future | CurrencyPair] = []
+        for o in res_json:
+            # no get, silent failure stinky
+            item_type = o["object_type"]
+            if item_type == "option_strategy":
+                items.append(OptionStrategy.from_json(o))
+            if item_type == "instrument":
+                items.append(Instrument.from_json(o))
+            if item_type == "currency_pair":
+                items.append(CurrencyPair.from_json(o))
+            if item_type == "future":
+                items.append(Future.from_json(o))
+        return items
+
+    def place_order(self):
+        pass

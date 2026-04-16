@@ -20,12 +20,20 @@ from .constants import (
     OPTION_ORDER_NON_FLOAT_KEYS,
     OPTION_POSITION_FLOAT_KEYS,
     OPTION_POSITION_NON_FLOAT_KEYS,
+    OPTION_STRATEGY_NON_FLOAT_KEYS,
     STOCK_INFO_FLOAT_KEYS,
     STOCK_INFO_NON_FLOAT_KEYS,
     STOCK_ORDER_FLOAT_KEYS,
     STOCK_ORDER_NON_FLOAT_KEYS,
     STOCK_POSITION_FLOAT_KEYS,
     STOCK_POSITION_NON_FLOAT_KEYS,
+    FUTURE_FLOAT_KEYS,
+    INDEX_NON_FLOAT_KEYS,
+    INDEX_FLOAT_KEYS,
+    INSTRUMENTS_NON_FLOAT_KEYS,
+    INSTRUMENTS_FLOAT_KEYS,
+    CURRENCY_PAIR_NON_FLOAT_KEYS,
+    CURRENCY_PAIR_FLOAT_KEYS,
 )
 
 
@@ -375,3 +383,79 @@ class OrderBook:
             for b in payload["bids"]
         ]
         return cls(**data)
+
+
+@dataclass(frozen=True, slots=True)
+class Index(ApiPayloadMixin):
+    name: str
+    symbol: str
+    object_id: str
+    high: float
+    low: float
+    high_52_weeks: float
+    low_52_weeks: float
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = INDEX_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = INDEX_FLOAT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class CurrencyPair(ApiPayloadMixin):
+    name: str
+    symbol: str
+    object_id: str
+    market_cap: float
+    high_52_weeks: float
+    low_52_weeks: float
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = CURRENCY_PAIR_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = CURRENCY_PAIR_FLOAT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class Instrument(ApiPayloadMixin):
+    name: str
+    symbol: str
+    object_id: str
+    high: float
+    low: float
+    average_volume: float
+    volume: float
+    market_cap: float
+    high_52_weeks: float
+    low_52_weeks: float
+    pe_ratio: float
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = INSTRUMENTS_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = INSTRUMENTS_FLOAT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class Future(ApiPayloadMixin):
+    symbol: str
+    object_id: str
+    name: str
+    futures_margin_requirement: float
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = FULL_QUOTE_NON_FLOAT_KEYS
+    _FLOAT_KEYS: ClassVar[set[str]] = FUTURE_FLOAT_KEYS
+
+
+@dataclass(frozen=True, slots=True)
+class OptionStrategy:
+    object_id: str
+    open_price_direction: str
+    name: str
+    chain_symbol: str
+    open_price_without_tvm: float
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Self:
+        data = {k: payload[k] for k in OPTION_STRATEGY_NON_FLOAT_KEYS}
+        data["open_price_without_tvm"] = float(
+            payload["open_price_without_tvm"]["amount"]
+        )
+        return cls(**data)
+
+
+@dataclass(frozen=True, slots=True)
+class WatchList:
+    name: str
+    id: str
+    items: list[CurrencyPair | Future | Instrument | OptionStrategy]
