@@ -18,6 +18,7 @@ from __future__ import annotations
 # 🐈
 import logging
 import os
+import uuid
 from collections import defaultdict
 from pathlib import Path
 from types import TracebackType
@@ -35,6 +36,8 @@ from .api_dataclasses import (
     CurrencyPair,
     FullQuote,
     Future,
+    IndexInfo,
+    IndexQuote,
     Instrument,
     OptionChain,
     OptionGreekData,
@@ -55,6 +58,9 @@ from .browser_token_parser import (
     get_token,
 )
 from .constants import (
+    API_GET_WSS_URL,
+    API_INDEX_QUOTE,
+    API_INDEXES,
     API_INSTRUMENTS,
     API_NON_OPTION_ORDER_HISTORY,
     API_OPTION_CHAINS,
@@ -78,6 +84,8 @@ from .constants import (
     PARAM_OPTION_STATE,
     PARAM_OPTION_STRIKE_PRICE,
     PARAM_OPTION_TYPE,
+    PARAM_SESSION_ID,
+    PARAM_SESSION_TYPE,
     PARAM_SYMBOLS,
     PARAM_TRADABLE_CHAIN_ID,
 )
@@ -310,6 +318,51 @@ class Robinhood:
         return (
             stock_info_list if len(stock_info_list) > 1 else stock_info_list[0]
         )
+
+    @overload
+    def get_index_info(self, symbols: str) -> IndexInfo | None: ...
+
+    @overload
+    def get_index_info(self, symbols: list[str]) -> list[IndexInfo] | None: ...
+
+    def get_index_info(
+        self,
+        symbols: str | list[str],
+    ) -> list[IndexInfo] | IndexInfo | None:
+        if isinstance(symbols, list):
+            symbols = ",".join(symbols)
+        params = {PARAM_SYMBOLS: symbols}
+        res_json = self._http_client._get(API_INDEXES, params)
+        if not res_json:
+            return None
+        indexes = [IndexInfo.from_json(i) for i in res_json if i]
+        if not indexes:
+            return None
+        return indexes if len(indexes) > 1 else indexes[0]
+
+    @overload
+    def get_index_quotes(self, symbols: str) -> IndexQuote | None: ...
+
+    @overload
+    def get_index_quotes(
+        self, symbols: list[str]
+    ) -> list[IndexQuote] | None: ...
+
+    def get_index_quotes(
+        self, symbols: str | list[str]
+    ) -> list[IndexQuote] | IndexQuote | None:
+        if isinstance(symbols, list):
+            symbols = ",".join(symbols)
+        params = {PARAM_SYMBOLS: symbols}
+        res_json = self._http_client._get(API_INDEX_QUOTE, params)
+        if not res_json:
+            return None
+        index_quotes = [
+            IndexQuote.from_json(i["data"]) for i in res_json[0]["data"] if i
+        ]
+        if not index_quotes:
+            return None
+        return index_quotes if len(index_quotes) > 1 else index_quotes[0]
 
     @overload
     def get_stock_quotes(self, symbol: str) -> FullQuote | None: ...
@@ -621,6 +674,9 @@ class Robinhood:
             logger.warning("%s returned none", symbol)
             return None
         res_json = self._http_client._get(API_ORDERBOOK + f"{si.id}/")
+        if not res_json:
+            logger.warning("%s returned none", symbol)
+            return None
         return OrderBook.from_json(res_json[0])
 
     def get_watchlists(self) -> list[WatchList] | None:
@@ -643,6 +699,8 @@ class Robinhood:
     ) -> list[OptionStrategy | Instrument | Future | CurrencyPair]:
         params = {
             PARAM_LIST_ID: id,
+            # This is needed for the options watchlist
+            # Won't work otherwise
             PARAM_LOAD_ALL_ATTRIBUTES: "False",
         }
         res_json = self._http_client._get(API_WATCHLIST_ITEMS, params)
@@ -662,5 +720,29 @@ class Robinhood:
                 items.append(Future.from_json(o))
         return items
 
-    def place_order(self):
-        pass
+    async def get_future_orderbook(self):
+        # Connect to websocket, aiohttp prob needed
+        raise NotImplementedError
+        # possible links:
+        # This link shows order book data
+        # Headers: Bearer token? Sec-Websocket-Protocol?
+        # wss://api.robinhood.com/marketdata/streaming/legend/v2/
+        # This link doesn't seem important for getting orderbook data
+        # wss://api-streaming.robinhood.com/wss/
+        # connect?topic=equity_order_update
+        # &topic=option_order_update
+        # &topic=crypto_order_update&topic=futures_order_update
+        # Api endpoint to get wss url ? API_GET_WSS_URL
+        session_id = uuid.uuid4()
+        params = {
+            PARAM_SESSION_ID: session_id,
+            PARAM_SESSION_TYPE: "blackwidow",
+        }
+        res_json = self._http_client._get(API_GET_WSS_URL, params)
+        if not res_json:
+            return None
+        val = res_json[0]["data"]["data"]
+        link = val["wss_url"]
+        ttl_ms = val["ttl_ms"]
+        token = val["token"]
+        print(link, ttl_ms, token)

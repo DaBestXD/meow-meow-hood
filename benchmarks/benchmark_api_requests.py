@@ -1,3 +1,4 @@
+import argparse
 import logging
 from decimal import Decimal
 from pathlib import Path
@@ -141,10 +142,15 @@ def bench_mark_main(
 
 
 if __name__ == "__main__":
+    arg = argparse.ArgumentParser(__name__)
+    arg.add_argument("-r", "--runs", default=10, type=int)
+    arg.add_argument("-v", "--verbose_level", default=2, type=int)
+    arg.add_argument("-l", "--logging_level", default=50, type=int)
+    cmd_args = arg.parse_args()
     total_run_time, _ = inline_timer(
         bench_mark_main,
-        runs=10,
-        verbose_level=MEDIUM,
-        logging_level=logging.CRITICAL,
+        runs=cmd_args.runs,
+        verbose_level=cmd_args.verbose_level,
+        logging_level=cmd_args.logging_level,
     )
     print(f"Total run time: {(total_run_time):.5f} seconds")

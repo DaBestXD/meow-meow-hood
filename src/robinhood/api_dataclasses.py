@@ -111,6 +111,21 @@ class FullQuote(ApiPayloadMixin):
 
 
 @dataclass(frozen=True, slots=True)
+class IndexQuote:
+    symbol: str
+    value: float
+    instrument_id: str
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Self:
+        return cls(
+            payload["symbol"],
+            payload["value"],
+            payload["instrument_id"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class OptionChain(ApiPayloadMixin):
     """
     Option chain metadata
@@ -363,7 +378,7 @@ class OptionOrder(ApiPayloadMixin):
 class BidAsk:
     side: Literal["bid", "ask"]
     price: float
-    quanity: int
+    quantity: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -382,6 +397,26 @@ class OrderBook:
             BidAsk(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
             for b in payload["bids"]
         ]
+        return cls(**data)
+
+
+@dataclass(frozen=True, slots=True)
+class IndexInfo:
+    id: str
+    name: str
+    symbol: str
+    state: Literal["active", "inactive"]
+    tradable_chain_ids: list[str] | None
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Self:
+        data = {}
+        data["id"] = payload["id"]
+        data["name"] = payload["simple_name"]
+        data["symbol"] = payload["symbol"]
+        chain_ids = payload["tradable_chain_ids"]
+        data["state"] = payload["state"]
+        data["tradable_chain_ids"] = chain_ids if chain_ids else None
         return cls(**data)
 
 
