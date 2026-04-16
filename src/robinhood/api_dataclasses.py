@@ -2,9 +2,16 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, Self
 
 from .constants import (
+    CURRENCY_PAIR_FLOAT_KEYS,
+    CURRENCY_PAIR_NON_FLOAT_KEYS,
     FULL_QUOTE_FLOAT_KEYS,
     FULL_QUOTE_INT_KEYS,
     FULL_QUOTE_NON_FLOAT_KEYS,
+    FUTURE_FLOAT_KEYS,
+    INDEX_FLOAT_KEYS,
+    INDEX_NON_FLOAT_KEYS,
+    INSTRUMENTS_FLOAT_KEYS,
+    INSTRUMENTS_NON_FLOAT_KEYS,
     OPTION_CHAIN_FLOAT_KEYS,
     OPTION_CHAIN_INT_KEYS,
     OPTION_CHAIN_NON_FLOAT_KEYS,
@@ -27,13 +34,6 @@ from .constants import (
     STOCK_ORDER_NON_FLOAT_KEYS,
     STOCK_POSITION_FLOAT_KEYS,
     STOCK_POSITION_NON_FLOAT_KEYS,
-    FUTURE_FLOAT_KEYS,
-    INDEX_NON_FLOAT_KEYS,
-    INDEX_FLOAT_KEYS,
-    INSTRUMENTS_NON_FLOAT_KEYS,
-    INSTRUMENTS_FLOAT_KEYS,
-    CURRENCY_PAIR_NON_FLOAT_KEYS,
-    CURRENCY_PAIR_FLOAT_KEYS,
 )
 
 
@@ -360,7 +360,7 @@ class OptionOrder(ApiPayloadMixin):
 
 
 @dataclass(slots=True)
-class bid_ask:
+class BidAsk:
     side: Literal["bid", "ask"]
     price: float
     quanity: int
@@ -368,18 +368,18 @@ class bid_ask:
 
 @dataclass(frozen=True, slots=True)
 class OrderBook:
-    asks: list[bid_ask]
-    bids: list[bid_ask]
+    asks: list[BidAsk]
+    bids: list[BidAsk]
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
         data = {}
         data["asks"] = [
-            bid_ask(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
+            BidAsk(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
             for b in payload["asks"]
         ]
         data["bids"] = [
-            bid_ask(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
+            BidAsk(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
             for b in payload["bids"]
         ]
         return cls(**data)

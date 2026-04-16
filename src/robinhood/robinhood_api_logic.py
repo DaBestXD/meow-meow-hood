@@ -1,5 +1,21 @@
 from __future__ import annotations
 
+#  __    __     ______     ______     __     __
+# /\ "-./  \   /\  ___\   /\  __ \   /\ \  _ \ \
+# \ \ \-./\ \  \ \  __\   \ \ \/\ \  \ \ \/ ".\ \
+#  \ \_\ \ \_\  \ \_____\  \ \_____\  \ \__/".~\_\
+#   \/_/  \/_/   \/_____/   \/_____/   \/_/   \/_/
+#  __    __     ______     ______     __     __
+# /\ "-./  \   /\  ___\   /\  __ \   /\ \  _ \ \
+# \ \ \-./\ \  \ \  __\   \ \ \/\ \  \ \ \/ ".\ \
+#  \ \_\ \ \_\  \ \_____\  \ \_____\  \ \__/".~\_\
+#   \/_/  \/_/   \/_____/   \/_____/   \/_/   \/_/
+#  __  __     ______     ______     _____
+# /\ \_\ \   /\  __ \   /\  __ \   /\  __-.
+# \ \  __ \  \ \ \/\ \  \ \ \/\ \  \ \ \/\ \
+#  \ \_\ \_\  \ \_____\  \ \_____\  \ \____-
+#   \/_/\/_/   \/_____/   \/_____/   \/____/
+# 🐈
 import logging
 import os
 from collections import defaultdict
@@ -16,21 +32,21 @@ from robinhood.set_up_script import set_up
 
 from ._http_client import RobinhoodHTTPClient
 from .api_dataclasses import (
+    CurrencyPair,
     FullQuote,
+    Future,
+    Instrument,
     OptionChain,
     OptionGreekData,
     OptionInstrument,
     OptionOrder,
     OptionPosition,
     OptionRequest,
+    OptionStrategy,
     OrderBook,
     StockInfo,
     StockOrder,
     WatchList,
-    OptionStrategy,
-    Instrument,
-    Future,
-    CurrencyPair,
 )
 from .browser_token_parser import (
     Browser,
@@ -55,6 +71,8 @@ from .constants import (
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
     PARAM_ID,
+    PARAM_LIST_ID,
+    PARAM_LOAD_ALL_ATTRIBUTES,
     PARAM_NON_ZERO,
     PARAM_OPTION_IDS,
     PARAM_OPTION_STATE,
@@ -62,9 +80,6 @@ from .constants import (
     PARAM_OPTION_TYPE,
     PARAM_SYMBOLS,
     PARAM_TRADABLE_CHAIN_ID,
-    API_WATCHLIST,
-    PARAM_LIST_ID,
-    PARAM_LOAD_ALL_ATTRIBUTES,
 )
 from .option_matching import map_option_requests_to_ois, match_req_to_oi
 
@@ -102,6 +117,7 @@ class Robinhood:
             extract_token: When ``True``, attempt to acquire a fresh bearer
                 token from the local browser session if the token loaded from
                 ``.env`` is missing or rejected.
+            write_env: When ``True`` writes env file to the config_path
             open_browser: When ``True``, allow the browser refresh helper to
                 briefly open Robinhood if a stored token is rejected.
             user_agent: Optional ``User-Agent`` header override for the shared

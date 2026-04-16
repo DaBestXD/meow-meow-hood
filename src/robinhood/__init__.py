@@ -17,13 +17,20 @@
 import importlib.metadata as metadata
 
 from .api_dataclasses import (
+    BidAsk,
+    CurrencyPair,
     FullQuote,
+    Future,
+    Instrument,
     OptionChain,
     OptionGreekData,
     OptionInstrument,
     OptionRequest,
+    OptionStrategy,
+    OrderBook,
     StockInfo,
     StockPosition,
+    WatchList,
 )
 from .robinhood_api_logic import Robinhood
 
@@ -33,12 +40,20 @@ except metadata.PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
-    "Robinhood",
-    "OptionRequest",
+    "BidAsk",
+    "CurrencyPair",
+    "FullQuote",
+    "Future",
+    "Instrument",
     "OptionChain",
     "OptionGreekData",
-    "FullQuote",
+    "OptionInstrument",
+    "OptionRequest",
+    "OptionStrategy",
+    "OrderBook",
+    "Robinhood",
     "StockInfo",
     "StockPosition",
+    "WatchList",
     "__version__",
 ]

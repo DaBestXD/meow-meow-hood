@@ -25,7 +25,7 @@ Ensure you are logged in locally to Robinhood on either:
 Auth works by extracting a locally stored access token from your browser data.
 By default the client automatically checks Chrome first and then Firefox for a
 valid token.
-If a stored token is fails auth and `open_browser=True`, it will attempt to
+If a stored token fails auth and `open_browser=True`, it will attempt to
 retrieve a fresh token by opening both Firefox and Chrome for a short period then
 close them( Warning this will break if Chrome/Firefox are already opened)
 This can be disabled on class creation with `extract_token=False`.
@@ -140,8 +140,6 @@ or
 python docs/examples/sample_option_chain.py
 Args:
 -s str[symbol] -d int[index for a list of dates] -r int[option range] -de int[delay]
-Default with no args:
-"SPY", 0(Nearest expiration date), 10(10 calls/puts based on stock price), 0.25(Seconds)
 ```
 
 ## Trust Me Bro Benchmarks
