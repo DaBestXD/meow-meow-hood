@@ -107,7 +107,7 @@ class OptionCache:
         """Clean up columns where exp_date is no longer valid(EDT is used)"""
         total_removed = 0
         today_et = datetime.now(ZoneInfo("America/New_York")).date()
-        args = {"today_et": today_et}
+        args = {"today_et": today_et.isoformat()}
         query = "DELETE FROM expiration_dates WHERE exp_date < :today_et"
         cur = self.con.execute(query, args)
         total_removed += cur.rowcount

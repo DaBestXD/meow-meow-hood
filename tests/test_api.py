@@ -3,24 +3,44 @@ from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import ANY, Mock, call, patch
 
-from robinhood import StockPosition
 from robinhood.api_dataclasses import (
+    CurrencyPair,
     FullQuote,
+    IndexInfo,
+    IndexQuote,
+    Instrument,
     OptionChain,
+    OptionOrder,
+    OptionPosition,
     OptionRequest,
+    OptionStrategy,
+    OrderBook,
     StockInfo,
+    StockOrder,
+    StockPosition,
+    WatchList,
 )
 from robinhood.constants import (
+    API_INDEX_QUOTE,
+    API_INDEXES,
     API_INSTRUMENTS,
+    API_NON_OPTION_ORDER_HISTORY,
     API_OPTION_CHAINS,
+    API_OPTION_ORDER_HISTORY,
     API_OPTIONS_GREEKS_DATA,
     API_OPTIONS_INSTRUMENTS,
+    API_ORDERBOOK,
     API_POSITIONS_NON_OPTIONS,
+    API_POSITIONS_OPTIONS,
     API_QUOTES,
+    API_WATCHLIST_DEFAULT,
+    API_WATCHLIST_ITEMS,
     PARAM_ACCOUNT_NUMBER,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
     PARAM_ID,
+    PARAM_LIST_ID,
+    PARAM_LOAD_ALL_ATTRIBUTES,
     PARAM_NON_ZERO,
     PARAM_OPTION_IDS,
     PARAM_OPTION_STATE,
@@ -31,11 +51,22 @@ from robinhood.constants import (
 from robinhood.robinhood_api_logic import Robinhood
 from tests.support import (
     build_full_quote_payload,
+    build_index_info_payload,
+    build_index_quote_payload,
     build_option_chain_payload,
     build_option_greek_data,
     build_option_instrument,
+    build_option_order_payload,
+    build_option_position_payload,
+    build_orderbook_payload,
     build_robinhood_client,
     build_stock_info_payload,
+    build_stock_order_payload,
+    build_stock_position_payload,
+    build_watchlist_currency_pair_payload,
+    build_watchlist_instrument_payload,
+    build_watchlist_option_strategy_payload,
+    build_watchlist_payload,
 )
 
 
@@ -632,6 +663,65 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             db_cache.insert_stock_info.call_args_list,
         )
 
+    def test_get_index_info_returns_list_for_multiple_symbols(self):
+        client = build_robinhood_client()
+        vix_payload = build_index_info_payload(
+            id="vix-id",
+            simple_name="Volatility Index",
+            symbol="VIX",
+        )
+        spx_payload = build_index_info_payload(
+            id="spx-id",
+            simple_name="S&P 500",
+            symbol="SPX",
+            tradable_chain_ids=[],
+        )
+        client._http_client._get.return_value = [vix_payload, spx_payload]
+
+        result = client.get_index_info(["VIX", "SPX"])
+
+        self.assertEqual(
+            [
+                IndexInfo.from_json(vix_payload),
+                IndexInfo.from_json(spx_payload),
+            ],
+            result,
+        )
+        client._http_client._get.assert_called_once_with(
+            API_INDEXES,
+            {PARAM_SYMBOLS: "VIX,SPX"},
+        )
+
+    def test_get_index_quotes_returns_list_from_nested_payload(self):
+        client = build_robinhood_client()
+        vix_payload = build_index_quote_payload(
+            symbol="VIX",
+            instrument_id="vix-id",
+            value="19.4",
+        )
+        spx_payload = build_index_quote_payload(
+            symbol="SPX",
+            instrument_id="spx-id",
+            value="5000.1",
+        )
+        client._http_client._get.return_value = [
+            {"data": [{"data": vix_payload}, {"data": spx_payload}]}
+        ]
+
+        result = client.get_index_quotes(["VIX", "SPX"])
+
+        self.assertEqual(
+            [
+                IndexQuote.from_json(vix_payload),
+                IndexQuote.from_json(spx_payload),
+            ],
+            result,
+        )
+        client._http_client._get.assert_called_once_with(
+            API_INDEX_QUOTE,
+            {PARAM_SYMBOLS: "VIX,SPX"},
+        )
+
     def test_get_oi_helper_syncs_cache_mappings(self):
         db_cache = Mock()
         client = build_robinhood_client(db_cache=db_cache)
@@ -862,6 +952,188 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
             "SELECT symbol FROM main_stock_info WHERE symbol = :symbol",
             {"symbol": "SPY"},
         )
+
+    def test_get_account_stock_positions_returns_empty_list_for_invalid_user_id(
+        self,
+    ):
+        client = build_robinhood_client()
+        client.user_id = 403
+
+        result = client.get_account_stock_positions()
+
+        self.assertEqual([], result)
+        client._http_client._get.assert_not_called()
+
+    def test_get_account_stock_positions_parses_payloads(self):
+        client = build_robinhood_client()
+        client.user_id = "ACC123"
+        payload = build_stock_position_payload()
+        client._http_client._get.return_value = [payload]
+
+        result = client.get_account_stock_positions()
+
+        self.assertEqual([StockPosition.from_json(payload)], result)
+        client._http_client._get.assert_called_once_with(
+            API_POSITIONS_NON_OPTIONS,
+            {
+                PARAM_NON_ZERO: "true",
+                PARAM_ACCOUNT_NUMBER: "ACC123",
+            },
+        )
+
+    def test_get_account_option_positions_parses_payloads(self):
+        client = build_robinhood_client()
+        client.user_id = "ACC123"
+        payload = build_option_position_payload()
+        client._http_client._get.return_value = [payload]
+
+        result = client.get_account_option_positions()
+
+        self.assertEqual([OptionPosition.from_json(payload)], result)
+        client._http_client._get.assert_called_once_with(
+            API_POSITIONS_OPTIONS,
+            {
+                PARAM_NON_ZERO: "true",
+                PARAM_ACCOUNT_NUMBER: "ACC123",
+            },
+        )
+
+    def test_get_option_order_history_returns_empty_list_for_invalid_user_id(
+        self,
+    ):
+        client = build_robinhood_client()
+        client.user_id = 401
+
+        result = client.get_option_order_history()
+
+        self.assertEqual([], result)
+        client._http_client._get.assert_not_called()
+
+    def test_get_option_order_history_parses_payloads(self):
+        client = build_robinhood_client()
+        client.user_id = "ACC123"
+        payload = build_option_order_payload()
+        client._http_client._get.return_value = [payload]
+
+        result = client.get_option_order_history()
+
+        self.assertEqual([OptionOrder.from_json(payload)], result)
+        client._http_client._get.assert_called_once_with(
+            API_OPTION_ORDER_HISTORY,
+            {PARAM_ACCOUNT_NUMBER: "ACC123"},
+        )
+
+    def test_get_stock_order_history_logs_when_user_id_is_invalid(self):
+        client = build_robinhood_client()
+        client.user_id = 401
+
+        with self.assertLogs(
+            "robinhood.robinhood_api_logic", level="WARNING"
+        ) as logs:
+            result = client.get_stock_order_history()
+
+        self.assertIsNone(result)
+        self.assertIn("user_id not valid", logs.output[0])
+        client._http_client._get.assert_not_called()
+
+    def test_get_stock_order_history_parses_payloads(self):
+        client = build_robinhood_client()
+        client.user_id = "ACC123"
+        payload = build_stock_order_payload()
+        client._http_client._get.return_value = [payload]
+
+        result = client.get_stock_order_history()
+
+        self.assertEqual([StockOrder.from_json(payload)], result)
+        client._http_client._get.assert_called_once_with(
+            API_NON_OPTION_ORDER_HISTORY,
+            {PARAM_ACCOUNT_NUMBER: "ACC123"},
+        )
+
+    def test_get_orderbook_returns_none_when_stock_info_lookup_fails(self):
+        client = build_robinhood_client()
+        client.get_stock_info = Mock(return_value=None)
+
+        with self.assertLogs(
+            "robinhood.robinhood_api_logic", level="WARNING"
+        ) as logs:
+            result = client.get_orderbook("SPY")
+
+        self.assertIsNone(result)
+        self.assertIn("SPY returned none", logs.output[0])
+        client._http_client._get.assert_not_called()
+
+    def test_get_orderbook_parses_snapshot_payload(self):
+        client = build_robinhood_client()
+        stock_info = StockInfo.from_json(
+            build_stock_info_payload(id="stock-id")
+        )
+        payload = build_orderbook_payload()
+        client.get_stock_info = Mock(return_value=stock_info)
+        client._http_client._get.return_value = [payload]
+
+        result = client.get_orderbook("SPY")
+
+        self.assertEqual(OrderBook.from_json(payload), result)
+        client._http_client._get.assert_called_once_with(
+            API_ORDERBOOK + "stock-id/"
+        )
+
+    def test_watchlist_helper_parses_supported_item_types(self):
+        client = build_robinhood_client()
+        instrument_payload = build_watchlist_instrument_payload()
+        currency_payload = build_watchlist_currency_pair_payload()
+        strategy_payload = build_watchlist_option_strategy_payload()
+        client._http_client._get.return_value = [
+            instrument_payload,
+            currency_payload,
+            strategy_payload,
+        ]
+
+        result = client._watchlist_helper("watchlist-id")
+
+        self.assertEqual(
+            [
+                Instrument.from_json(instrument_payload),
+                CurrencyPair.from_json(currency_payload),
+                OptionStrategy.from_json(strategy_payload),
+            ],
+            result,
+        )
+        client._http_client._get.assert_called_once_with(
+            API_WATCHLIST_ITEMS,
+            {
+                PARAM_LIST_ID: "watchlist-id",
+                PARAM_LOAD_ALL_ATTRIBUTES: "False",
+            },
+        )
+
+    def test_get_watchlists_builds_watchlist_objects(self):
+        client = build_robinhood_client()
+        watchlist_payload = build_watchlist_payload(
+            id="watchlist-id",
+            display_name="Core Holdings",
+        )
+        watchlist_item = Instrument.from_json(
+            build_watchlist_instrument_payload()
+        )
+        client._http_client._get.return_value = [watchlist_payload]
+        client._watchlist_helper = Mock(return_value=[watchlist_item])
+
+        result = client.get_watchlists()
+
+        self.assertEqual(
+            [
+                WatchList(
+                    name="Core Holdings",
+                    id="watchlist-id",
+                    items=[watchlist_item],
+                )
+            ],
+            result,
+        )
+        client._http_client._get.assert_called_once_with(API_WATCHLIST_DEFAULT)
+        client._watchlist_helper.assert_called_once_with("watchlist-id")
 
     def get_account_stock_positions(self) -> list[StockPosition]:
         params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}

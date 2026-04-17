@@ -120,7 +120,7 @@ class IndexQuote:
     def from_json(cls, payload: dict[str, Any]) -> Self:
         return cls(
             payload["symbol"],
-            payload["value"],
+            float(payload["value"]),
             payload["instrument_id"],
         )
 

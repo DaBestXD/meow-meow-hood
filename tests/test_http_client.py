@@ -2,7 +2,12 @@ import unittest
 from unittest.mock import Mock, call, patch
 
 from robinhood._http_client import RobinhoodHTTPClient
-from robinhood.constants import BASE_API_LINK, MAX_LIMIT, PARAM_LIMIT
+from robinhood.constants import (
+    BASE_API_BONFIRE_LINK,
+    BASE_API_LINK,
+    MAX_LIMIT,
+    PARAM_LIMIT,
+)
 from tests.support import build_http_client
 
 
@@ -164,6 +169,43 @@ class TestRobinhoodHTTPClient(unittest.TestCase):
         client.close()
 
         session.close.assert_called_once_with()
+
+    def test_post_returns_json_from_successful_response(self):
+        session = Mock()
+        session.post.return_value = Mock(
+            status_code=200,
+            json=Mock(return_value={"id": "order-id"}),
+        )
+        client = build_http_client(session=session)
+
+        result = client._post(
+            "/orders/",
+            BASE_API_BONFIRE_LINK,
+            {"symbol": "SPY"},
+        )
+
+        self.assertEqual({"id": "order-id"}, result)
+        session.post.assert_called_once_with(
+            url=BASE_API_BONFIRE_LINK + "/orders/",
+            json={"symbol": "SPY"},
+        )
+
+    def test_post_returns_none_on_non_200(self):
+        session = Mock()
+        session.post.return_value = Mock(status_code=400)
+        client = build_http_client(session=session)
+        client._error_status_code_handler = Mock()
+
+        result = client._post(
+            "/orders/",
+            BASE_API_BONFIRE_LINK,
+            {"symbol": "SPY"},
+        )
+
+        self.assertIsNone(result)
+        client._error_status_code_handler.assert_called_once_with(
+            "/orders/", 400
+        )
 
 
 if __name__ == "__main__":

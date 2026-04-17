@@ -18,7 +18,6 @@ from __future__ import annotations
 # 🐈
 import logging
 import os
-import uuid
 from collections import defaultdict
 from pathlib import Path
 from types import TracebackType
@@ -58,7 +57,6 @@ from .browser_token_parser import (
     get_token,
 )
 from .constants import (
-    API_GET_WSS_URL,
     API_INDEX_QUOTE,
     API_INDEXES,
     API_INSTRUMENTS,
@@ -84,8 +82,6 @@ from .constants import (
     PARAM_OPTION_STATE,
     PARAM_OPTION_STRIKE_PRICE,
     PARAM_OPTION_TYPE,
-    PARAM_SESSION_ID,
-    PARAM_SESSION_TYPE,
     PARAM_SYMBOLS,
     PARAM_TRADABLE_CHAIN_ID,
 )
@@ -616,7 +612,7 @@ class Robinhood:
         else:
             return self._db_cache.execute_query_with_args(query, args)
 
-    def get_account_stock_positions(self) -> list[StockPosition]:
+    def get_account_stock_positions(self) -> list[StockPosition] | None:
         """
         Returns list of StockPosition classes
         Set raw_data to `true` if you want the raw dictionary
@@ -627,46 +623,45 @@ class Robinhood:
         params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
         res_json = self._http_client._get(API_POSITIONS_NON_OPTIONS, params)
         if not res_json:
-            return []
+            logger.warning("Unable to get account stock positions")
+            return None
         stock_positions = [StockPosition.from_json(s) for s in res_json if s]
         return stock_positions
 
-    def get_account_option_positions(self) -> list[OptionPosition]:
+    def get_account_option_positions(self) -> list[OptionPosition] | None:
         """Returns list of OptionPosition classes"""
         params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
         res_json = self._http_client._get(API_POSITIONS_OPTIONS, params)
         if not res_json:
-            return []
+            logger.warning("Unable to get account option positions")
+            return None
         option_positions = [
             OptionPosition.from_json(op) for op in res_json if op
         ]
         return option_positions
 
-    def get_option_order_history(
-        self, raw_json: bool = False
-    ) -> list[OptionOrder] | list[dict[str, Any]]:
-        """Set raw_json to `true` if you want the raw json response back"""
+    def get_option_order_history(self) -> list[OptionOrder] | None:
         if isinstance(self.user_id, int):
             return []
         params = {PARAM_ACCOUNT_NUMBER: self.user_id}
         res_json = self._http_client._get(API_OPTION_ORDER_HISTORY, params)
         if not res_json:
-            return []
+            logger.warning("Unable to get option order history")
+            return None
         option_orders = [OptionOrder.from_json(o) for o in res_json if o]
-        return option_orders if not raw_json else res_json
+        return option_orders
 
-    def get_stock_order_history(
-        self, raw_json: bool = False
-    ) -> list[StockOrder] | list[dict[str, Any]]:
-        """Set raw_json to `true` if you want the raw json response back"""
+    def get_stock_order_history(self) -> list[StockOrder] | None:
         if isinstance(self.user_id, int):
-            return []
+            logger.warning("user_id not valid")
+            return None
         params = {PARAM_ACCOUNT_NUMBER: self.user_id}
         res_json = self._http_client._get(API_NON_OPTION_ORDER_HISTORY, params)
         if not res_json:
-            return []
+            logger.warning("Unable to find non-option order history")
+            return None
         stock_orders = [StockOrder.from_json(s) for s in res_json if s]
-        return stock_orders if not raw_json else res_json
+        return stock_orders
 
     def get_orderbook(self, symbol: str) -> OrderBook | None:
         si = self.get_stock_info(symbol)
@@ -719,30 +714,3 @@ class Robinhood:
             if item_type == "future":
                 items.append(Future.from_json(o))
         return items
-
-    async def get_future_orderbook(self):
-        # Connect to websocket, aiohttp prob needed
-        raise NotImplementedError
-        # possible links:
-        # This link shows order book data
-        # Headers: Bearer token? Sec-Websocket-Protocol?
-        # wss://api.robinhood.com/marketdata/streaming/legend/v2/
-        # This link doesn't seem important for getting orderbook data
-        # wss://api-streaming.robinhood.com/wss/
-        # connect?topic=equity_order_update
-        # &topic=option_order_update
-        # &topic=crypto_order_update&topic=futures_order_update
-        # Api endpoint to get wss url ? API_GET_WSS_URL
-        session_id = uuid.uuid4()
-        params = {
-            PARAM_SESSION_ID: session_id,
-            PARAM_SESSION_TYPE: "blackwidow",
-        }
-        res_json = self._http_client._get(API_GET_WSS_URL, params)
-        if not res_json:
-            return None
-        val = res_json[0]["data"]["data"]
-        link = val["wss_url"]
-        ttl_ms = val["ttl_ms"]
-        token = val["token"]
-        print(link, ttl_ms, token)

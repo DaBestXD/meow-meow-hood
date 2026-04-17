@@ -47,3 +47,15 @@ class TestConfigureLogger(unittest.TestCase):
         self.assertEqual([handler], self.logger.handlers)
         self.assertEqual(logging.DEBUG, self.logger.level)
         self.assertFalse(self.logger.propagate)
+
+    def test_none_logging_level_leaves_existing_configuration_unchanged(self):
+        handler = logging.NullHandler()
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.WARNING)
+        self.logger.propagate = True
+
+        configure_logger(None, MISSING)
+
+        self.assertEqual([handler], self.logger.handlers)
+        self.assertEqual(logging.WARNING, self.logger.level)
+        self.assertTrue(self.logger.propagate)

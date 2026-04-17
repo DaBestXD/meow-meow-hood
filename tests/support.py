@@ -170,6 +170,228 @@ def build_stock_info_payload(
     }
 
 
+def build_index_info_payload(
+    *,
+    id: str = "index-id",
+    simple_name: str = "CBOE Volatility Index",
+    symbol: str = "VIX",
+    state: str = "active",
+    tradable_chain_ids: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "simple_name": simple_name,
+        "symbol": symbol,
+        "state": state,
+        "tradable_chain_ids": (
+            ["chain-id"] if tradable_chain_ids is None else tradable_chain_ids
+        ),
+    }
+
+
+def build_index_quote_payload(
+    *,
+    symbol: str = "VIX",
+    instrument_id: str = "index-id",
+    value: str = "18.2",
+) -> dict[str, object]:
+    return {
+        "symbol": symbol,
+        "instrument_id": instrument_id,
+        "value": value,
+    }
+
+
+def build_stock_position_payload(
+    *,
+    symbol: str = "SPY",
+    quantity: str = "3.5",
+    type: str = "long",
+    clearing_average_cost: str = "500.25",
+    instrument_id: str = "stock-id",
+) -> dict[str, object]:
+    return {
+        "symbol": symbol,
+        "quantity": quantity,
+        "type": type,
+        "clearing_average_cost": clearing_average_cost,
+        "instrument_id": instrument_id,
+    }
+
+
+def build_option_position_payload(
+    *,
+    id: str = "position-id",
+    chain_symbol: str = "SPY",
+    option_id: str = "option-id",
+) -> dict[str, object]:
+    return {
+        "account": "https://api.robinhood.com/accounts/ACC123/",
+        "account_number": "ACC123",
+        "average_price": "1.50",
+        "chain_id": "chain-id",
+        "chain_symbol": chain_symbol,
+        "clearing_cost_basis": "150.0",
+        "clearing_direction": "debit",
+        "clearing_intraday_cost_basis": "75.0",
+        "clearing_intraday_direction": "debit",
+        "clearing_intraday_running_quantity": "1.0",
+        "clearing_running_quantity": "2.0",
+        "created_at": "2026-04-01T09:30:00Z",
+        "expiration_date": "2026-04-17",
+        "id": id,
+        "intraday_average_open_price": "1.25",
+        "intraday_quantity": "1.0",
+        "opened_at": "2026-04-01T09:30:00Z",
+        "option": f"https://api.robinhood.com/options/instruments/{option_id}/",
+        "option_id": option_id,
+        "pending_assignment_quantity": "0",
+        "pending_buy_quantity": "0",
+        "pending_exercise_quantity": "0",
+        "pending_expiration_quantity": "0",
+        "pending_expired_quantity": "0",
+        "pending_sell_quantity": "0",
+        "quantity": "2.0",
+        "trade_value_multiplier": "100.0",
+        "type": "long",
+        "updated_at": "2026-04-01T09:30:00Z",
+        "url": f"https://api.robinhood.com/options/positions/{id}/",
+    }
+
+
+def build_stock_order_payload(
+    *,
+    id: str = "order-id",
+    instrument_id: str = "stock-id",
+    quantity: str = "2.0",
+    average_price: str = "10.5",
+    total_amount: str = "21.0",
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "instrument_id": instrument_id,
+        "side": "buy",
+        "type": "market",
+        "state": "filled",
+        "quantity": quantity,
+        "average_price": average_price,
+        "fees": "0.0",
+        "created_at": "2026-04-01T09:30:00Z",
+        "updated_at": "2026-04-01T09:31:00Z",
+        "last_transaction_at": "2026-04-01T09:31:00Z",
+        "total_notional": {"amount": total_amount},
+    }
+
+
+def build_option_order_payload(
+    *,
+    id: str = "option-order-id",
+    chain_symbol: str = "SPY",
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "chain_symbol": chain_symbol,
+        "direction": "debit",
+        "strategy": "long_call",
+        "state": "filled",
+        "quantity": "1",
+        "created_at": "2026-04-01T09:30:00Z",
+        "updated_at": "2026-04-01T09:31:00Z",
+        "net_amount": "1.25",
+        "legs": [
+            {
+                "side": "buy",
+                "expiration_date": "2026-04-17",
+                "option_type": "call",
+                "strike_price": "500.0",
+                "ratio_quantity": "1",
+            }
+        ],
+    }
+
+
+def build_orderbook_payload() -> dict[str, object]:
+    return {
+        "asks": [
+            {
+                "side": "ask",
+                "price": {"amount": "501.25"},
+                "quantity": "10",
+            }
+        ],
+        "bids": [
+            {
+                "side": "bid",
+                "price": {"amount": "501.0"},
+                "quantity": "8",
+            }
+        ],
+    }
+
+
+def build_watchlist_payload(
+    *,
+    id: str = "watchlist-id",
+    display_name: str = "Core Holdings",
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "display_name": display_name,
+    }
+
+
+def build_watchlist_instrument_payload(
+    *,
+    object_id: str = "instrument-object-id",
+    symbol: str = "SPY",
+) -> dict[str, object]:
+    return {
+        "object_type": "instrument",
+        "name": f"{symbol} ETF",
+        "symbol": symbol,
+        "object_id": object_id,
+        "high": "505.0",
+        "low": "499.0",
+        "average_volume": "1000000",
+        "volume": "800000",
+        "market_cap": "100000000.0",
+        "high_52_weeks": "600.0",
+        "low_52_weeks": "400.0",
+        "pe_ratio": "25.0",
+    }
+
+
+def build_watchlist_currency_pair_payload(
+    *,
+    object_id: str = "currency-object-id",
+    symbol: str = "BTC-USD",
+) -> dict[str, object]:
+    return {
+        "object_type": "currency_pair",
+        "name": "Bitcoin / US Dollar",
+        "symbol": symbol,
+        "object_id": object_id,
+        "market_cap": "2000000000.0",
+        "high_52_weeks": "70000.0",
+        "low_52_weeks": "25000.0",
+    }
+
+
+def build_watchlist_option_strategy_payload(
+    *,
+    object_id: str = "strategy-object-id",
+    chain_symbol: str = "SPY",
+) -> dict[str, object]:
+    return {
+        "object_type": "option_strategy",
+        "object_id": object_id,
+        "open_price_direction": "credit",
+        "name": "Bull Put Spread",
+        "chain_symbol": chain_symbol,
+        "open_price_without_tvm": {"amount": "1.15"},
+    }
+
+
 def build_robinhood_client(
     *,
     http_client: object | None = None,
