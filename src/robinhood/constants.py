@@ -14,6 +14,7 @@ API_OPTIONS_INSTRUMENTS = "/options/instruments/"
 API_GET_WSS_URL = "/marketdata/token/v1/"
 API_INDEXES = "/indexes/"
 API_ORDERBOOK = "/marketdata/pricebook/snapshots/"
+API_OPTION_ORDER = "/options/orders/"
 API_INSTRUMENTS = "/instruments/"
 API_OPTION_CHAINS = "/options/chains/"
 API_MARKET_DATA = "/marketdata/"
@@ -296,3 +297,12 @@ INSTRUMENTS_NON_FLOAT_KEYS = {
 
 CURRENCY_PAIR_NON_FLOAT_KEYS = {"name", "symbol", "object_id"}
 CURRENCY_PAIR_FLOAT_KEYS = {"market_cap", "high_52_weeks", "low_52_weeks"}
+
+OPTION_ORDER_RESPONSE_NON_FLOAT_KEYS = {
+    "id",
+    "chain_symbol",
+    "cancel_url",
+    "direction",
+    "strategy",
+}
+OPTION_ORDER_RESPONSE_FLOAT_KEYS = {"premium", "estimated_total_new_amount"}

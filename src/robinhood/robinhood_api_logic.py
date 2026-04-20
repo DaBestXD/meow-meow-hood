@@ -18,10 +18,10 @@ from __future__ import annotations
 # 🐈
 import logging
 import os
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from types import TracebackType
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 from dotenv import load_dotenv
 
@@ -42,6 +42,8 @@ from .api_dataclasses import (
     OptionGreekData,
     OptionInstrument,
     OptionOrder,
+    OptionOrderHistory,
+    OptionOrderResponse,
     OptionPosition,
     OptionRequest,
     OptionStrategy,
@@ -49,6 +51,7 @@ from .api_dataclasses import (
     StockInfo,
     StockOrder,
     WatchList,
+    _OptionLeg,
 )
 from .browser_token_parser import (
     Browser,
@@ -62,6 +65,7 @@ from .constants import (
     API_INSTRUMENTS,
     API_NON_OPTION_ORDER_HISTORY,
     API_OPTION_CHAINS,
+    API_OPTION_ORDER,
     API_OPTION_ORDER_HISTORY,
     API_OPTIONS_GREEKS_DATA,
     API_OPTIONS_INSTRUMENTS,
@@ -71,6 +75,7 @@ from .constants import (
     API_QUOTES,
     API_WATCHLIST_DEFAULT,
     API_WATCHLIST_ITEMS,
+    BASE_API_LINK,
     PARAM_ACCOUNT_NUMBER,
     PARAM_CHAIN_ID,
     PARAM_EXPIRATION_DATE,
@@ -91,12 +96,6 @@ logger = logging.getLogger(__name__)
 
 
 class Robinhood:
-    """Client for Robinhood stock and option market data.
-
-    The client manages bearer token discovery, a shared HTTP session, and an
-    optional local SQLite cache for option chain and instrument metadata.
-    """
-
     def __init__(
         self,
         *,
@@ -298,12 +297,10 @@ class Robinhood:
         self, symbols: str | list[str]
     ) -> StockInfo | list[StockInfo] | None:
         """Return stock metadata for one symbol or a list of symbols."""
-        if isinstance(symbols, str):
-            joined_symbols = symbols
-        else:
-            joined_symbols = ",".join(symbols)
+        if isinstance(symbols, list):
+            symbols = ",".join(symbols)
         res_json = self._http_client._get(
-            API_INSTRUMENTS, {PARAM_SYMBOLS: joined_symbols}
+            API_INSTRUMENTS, {PARAM_SYMBOLS: symbols}
         )
         if not res_json:
             return None
@@ -475,7 +472,9 @@ class Robinhood:
             )
         if not res_json:
             return []
-        return_val = [OptionInstrument.from_json(r) for r in res_json if r]
+        return_val: list[OptionInstrument] = [
+            OptionInstrument.from_json(r) for r in res_json if r
+        ]
         if self._db_cache:
             self._db_cache.insert_option_instrument(return_val)
             mapped_op_req_to_oi = map_option_requests_to_ois(
@@ -640,7 +639,7 @@ class Robinhood:
         ]
         return option_positions
 
-    def get_option_order_history(self) -> list[OptionOrder] | None:
+    def get_option_order_history(self) -> list[OptionOrderHistory] | None:
         if isinstance(self.user_id, int):
             return []
         params = {PARAM_ACCOUNT_NUMBER: self.user_id}
@@ -648,7 +647,7 @@ class Robinhood:
         if not res_json:
             logger.warning("Unable to get option order history")
             return None
-        option_orders = [OptionOrder.from_json(o) for o in res_json if o]
+        option_orders = [OptionOrderHistory.from_json(o) for o in res_json if o]
         return option_orders
 
     def get_stock_order_history(self) -> list[StockOrder] | None:
@@ -714,3 +713,57 @@ class Robinhood:
             if item_type == "future":
                 items.append(Future.from_json(o))
         return items
+
+    def open_option_position(
+        self,
+        option_legs: list[OptionRequest],
+        order_type: Literal["debit", "credit"],
+        quantity: int,
+        limit_price: float,
+    ) -> OptionOrderResponse | None:
+        # ? I don't even remember why I used this 😹
+        # oh... chain_id not symbol
+        chain_symbol_pair = {o.symbol: o.symbol for o in option_legs}
+        if len(chain_symbol_pair) > 1:
+            raise ValueError("Order should only be for one symbol")
+        chain = self.get_option_chain_data(*chain_symbol_pair)
+        if not chain:
+            raise ValueError(
+                f"Unable to find chain id for {[*chain_symbol_pair][0]}"
+            )
+        # 😹 wtf is this piece of shit
+        chain_symbol_pair[[*chain_symbol_pair][0]] = chain.id
+        oi_list = self._get_oi_helper(option_legs, chain_symbol_pair)
+        ratio = dict(Counter(option_legs))
+        if len(oi_list) != len(option_legs):
+            raise ValueError(
+                "Option legs should match length of OptionInstruments"
+            )
+        n = map_option_requests_to_ois(option_legs, oi_list)
+        legs: list[_OptionLeg] = []
+        for leg, oi in n.items():
+            oi = oi[0]
+            if not leg.position_effect or not leg.side:
+                raise ValueError
+            legs.append(
+                {
+                    "option": oi.url,
+                    "position_effect": leg.position_effect,
+                    "ratio_quantity": ratio[leg],
+                    "side": leg.side,
+                }
+            )
+        p = OptionOrder(
+            account=BASE_API_LINK + f"accounts/{self.user_id}",
+            legs=legs,
+            direction=order_type,
+            price=limit_price,
+            quantity=quantity,
+        )
+        res_json = self._http_client._post(
+            endpoint=API_OPTION_ORDER, json=p.__dict__
+        )
+        if not res_json:
+            logger.warning("Failed to place order for %s", option_legs)
+            return None
+        return OptionOrderResponse.from_json(res_json[0])

@@ -187,7 +187,8 @@ class TestRobinhoodHTTPClient(unittest.TestCase):
         self.assertEqual({"id": "order-id"}, result)
         session.post.assert_called_once_with(
             url=BASE_API_BONFIRE_LINK + "/orders/",
-            json={"symbol": "SPY"},
+            data={"symbol": "SPY"},
+            json=None,
         )
 
     def test_post_returns_none_on_non_200(self):

@@ -53,7 +53,7 @@ class RobinhoodHTTPClient:
                 "GET request: %s, %s", endpoint, self._page_get.__name__
             )
             res = self.session.get(url=endpoint)
-            if res.status_code != 200:
+            if res.status_code >= 300:
                 self._error_status_code_handler(endpoint, res.status_code)
                 return []
             res_json = res.json()
@@ -92,16 +92,21 @@ class RobinhoodHTTPClient:
     def _post(
         self,
         endpoint: str,
-        base_api_link: str,
+        base_api_link: str = BASE_API_LINK,
         data: dict | None = None,
+        json: dict | None = None,
     ) -> dict | None:
-        res = self.session.post(url=base_api_link + endpoint, json=data)
+        res = self.session.post(
+            url=base_api_link + endpoint,
+            data=data,
+            json=json,
+        )
         logger.debug(
             "POST request: %s, data length: %d",
             endpoint,
             len(data) if data else 0,
         )
-        if res.status_code != 200:
+        if res.status_code >= 300:
             self._error_status_code_handler(endpoint, res.status_code)
             return None
         return res.json()

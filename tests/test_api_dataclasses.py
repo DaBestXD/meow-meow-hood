@@ -6,7 +6,7 @@ from robinhood.api_dataclasses import (
     IndexInfo,
     IndexQuote,
     OptionGreekData,
-    OptionOrder,
+    OptionOrderHistory,
     OptionPosition,
     OrderBook,
     StockInfo,
@@ -145,7 +145,7 @@ class TestApiDataclasses(unittest.TestCase):
         self.assertEqual(21.0, order.price)
 
     def test_option_order_from_json_builds_legs_and_net_amount_price(self):
-        order = OptionOrder.from_json(build_option_order_payload())
+        order = OptionOrderHistory.from_json(build_option_order_payload())
 
         self.assertEqual("option-order-id", order.id)
         self.assertEqual(1.0, order.quantity)

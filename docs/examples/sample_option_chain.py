@@ -63,14 +63,13 @@ def option_range(
 
 
 def format_text(op_req: OptionRequest, op_greek: OptionGreekData) -> str:
-    vals: list[str] = [
-        f"{op_req.strike_price:.1f}\t",
-        f"{op_greek.bid_price:.2f}\t",
-        f"{op_greek.ask_price:.2f}\t",
-        f"{(op_greek.implied_volatility * 100):.2f}%\t",
-        f"{op_greek.volume}\t",
-    ]
-    return " ".join(vals)
+    return (
+        f"{op_req.strike_price:>8.1f} "
+        f"{op_greek.bid_price:>8.2f} "
+        f"{op_greek.ask_price:>8.2f} "
+        f"{op_greek.implied_volatility:>8.2%} "
+        f"{op_greek.volume:>10}"
+    )
 
 
 def main_loop(
@@ -99,7 +98,8 @@ def main_loop(
             print(f"{symbol} price: {quote.last_trade_price} exp_date: {date}")
             print(f"{delay=}")
             print(
-                "Call\t Bid\t Ask\t IV\t Volume\t Put\t Bid\t Ask\t IV\t Volume"
+                f"{'Call':>8} {'Bid':>8} {'Ask':>8} {'IV':>8} {'Volume':>10}",
+                f"{'Put':>8} {'Bid':>8} {'Ask':>8} {'IV':>8} {'Volume':>10}",
             )
             for i in range(len(call_side)):
                 call_req, put_req = call_side[i], put_side[i]

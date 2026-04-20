@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal, Self
+from types import NotImplementedType
+from typing import Any, ClassVar, Literal, Self, TypedDict
+from uuid import uuid4
 
 from .constants import (
     CURRENCY_PAIR_FLOAT_KEYS,
@@ -34,6 +36,8 @@ from .constants import (
     STOCK_ORDER_NON_FLOAT_KEYS,
     STOCK_POSITION_FLOAT_KEYS,
     STOCK_POSITION_NON_FLOAT_KEYS,
+    OPTION_ORDER_RESPONSE_FLOAT_KEYS,
+    OPTION_ORDER_RESPONSE_NON_FLOAT_KEYS,
 )
 
 
@@ -83,6 +87,20 @@ class OptionRequest:
     exp_date: str | None = None
     option_type: Literal["call", "put"] | None = None
     strike_price: float | None = None
+    position_effect: Literal["open", "close"] | None = None
+    side: Literal["sell", "buy"] | None = None
+
+    def __mul__(self, num: int) -> list[Self]:
+        # if not isinstance(num, int):
+        #     return NotImplemented
+        if num <= 0:
+            raise ValueError(
+                f"{self.__class__.__name__} multiplier must be > 0"
+            )
+        return [self] * num
+
+    def __rmul__(self, num: int) -> list[Self] | NotImplementedType:
+        return self.__mul__(num)
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +196,9 @@ class OptionInstrument(ApiPayloadMixin):
     underlying_type: str
     _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_INSTRUMENT_NON_FLOAT_KEYS
     _FLOAT_KEYS: ClassVar[set[str]] = OPTION_INSTRUMENT_FLOAT_KEYS
+
+    def __str__(self) -> str:
+        return f"Symbol: {self.chain_symbol}, exp_date: {self.expiration_date}, type: {self.type}, strike_price: {self.strike_price}"  # noqa: E501
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,7 +362,7 @@ class OptionOrderLeg(ApiPayloadMixin):
 
 
 @dataclass(frozen=True, slots=True)
-class OptionOrder(ApiPayloadMixin):
+class OptionOrderHistory(ApiPayloadMixin):
     id: str
     chain_symbol: str
     direction: str
@@ -494,3 +515,39 @@ class WatchList:
     name: str
     id: str
     items: list[CurrencyPair | Future | Instrument | OptionStrategy]
+
+
+class _OptionLeg(TypedDict):
+    option: str
+    position_effect: Literal["open", "close"]
+    ratio_quantity: int
+    side: Literal["buy", "sell"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class OptionOrder:
+    account: str
+    direction: Literal["debit", "credit"]
+    form_source: str = "option_chain"
+    legs: list[_OptionLeg]
+    market_hours: str = "regular_hours"
+    override_day_trade_checks: str = "false"
+    price: float
+    quantity: int
+    ref_id: str = str(uuid4())
+    time_in_force: str = "gfd"
+    trigger: str = "immediate"
+    type: str = "limit"
+
+
+@dataclass(frozen=True)
+class OptionOrderResponse(ApiPayloadMixin):
+    id: str
+    chain_symbol: str
+    cancel_url: str
+    direction: Literal["debit", "credit"]
+    premium: float
+    estimated_total_new_amount: float
+    strategy: str
+    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_RESPONSE_FLOAT_KEYS
+    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_RESPONSE_NON_FLOAT_KEYS

@@ -10,7 +10,7 @@ from robinhood.api_dataclasses import (
     IndexQuote,
     Instrument,
     OptionChain,
-    OptionOrder,
+    OptionOrderHistory,
     OptionPosition,
     OptionRequest,
     OptionStrategy,
@@ -1017,7 +1017,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
 
         result = client.get_option_order_history()
 
-        self.assertEqual([OptionOrder.from_json(payload)], result)
+        self.assertEqual([OptionOrderHistory.from_json(payload)], result)
         client._http_client._get.assert_called_once_with(
             API_OPTION_ORDER_HISTORY,
             {PARAM_ACCOUNT_NUMBER: "ACC123"},

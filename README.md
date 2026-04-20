@@ -32,7 +32,7 @@ This can be disabled on class creation with `extract_token=False`.
 
 You will need to pass in the access token manually if token extraction is
 disabled.
-Config folder is created at the current working directory labeled `.meow-meow-hood`.
+Config folder is created at the current working directory labeled `.meow-meow-config`.
 Any files created(cache and env) are placed inside the config folder.
 
 ```python
@@ -42,7 +42,7 @@ Robinhood(extract_token=False, access_token="...")
 ## Usage
 
 JSON responses are returned as named data classes for easier parsing.\
-Examples: `FullQuote`, `OptionInstrument`, `OptionGreekData`, etc.\
+Examples: `FullQuote`, `OptionInstrument`, `OptionGreekData`, etc.
 
 ```python
 @dataclass(frozen=True, slots=True)
