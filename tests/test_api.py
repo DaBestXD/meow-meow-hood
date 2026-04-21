@@ -506,14 +506,12 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         )
         client.no_db_option_greeks_batch_request = Mock(return_value={})
 
-        with self.assertLogs(
-            "robinhood.robinhood_api_logic", level="DEBUG"
-        ) as logs:
+        with self.assertLogs("robinhood.api.options", level="DEBUG") as logs:
             result = client.get_option_greeks_batch_request(request)
 
         self.assertEqual({request: []}, result)
         self.assertIn(
-            "DEBUG:robinhood.robinhood_api_logic:"
+            "DEBUG:robinhood.api.options:"
             "get_option_greeks_batch_request cache hit for SPY",
             logs.output,
         )
@@ -552,9 +550,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client = build_robinhood_client()
         client._http_client._get.return_value = []
 
-        with self.assertLogs(
-            "robinhood.robinhood_api_logic", level="WARNING"
-        ) as logs:
+        with self.assertLogs("robinhood.api.options", level="WARNING") as logs:
             result = client.get_expiration_dates("SPY")
 
         self.assertIsNone(result)
@@ -793,9 +789,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client = build_robinhood_client(db_cache=db_cache)
         client.get_option_chain_data = Mock(return_value=None)
 
-        with self.assertLogs(
-            "robinhood.robinhood_api_logic", level="WARNING"
-        ) as logs:
+        with self.assertLogs("robinhood.api.options", level="WARNING") as logs:
             result = client.get_strike_prices(
                 symbol="SPY",
                 exp_date="2026-04-07",
@@ -830,9 +824,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client.get_option_chain_data = Mock(return_value=None)
         client._get_oi_helper = Mock()
 
-        with self.assertLogs(
-            "robinhood.robinhood_api_logic", level="WARNING"
-        ) as logs:
+        with self.assertLogs("robinhood.api.options", level="WARNING") as logs:
             result = client.no_db_option_greeks_batch_request([request])
 
         self.assertEqual({request: []}, result)
@@ -1027,9 +1019,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client = build_robinhood_client()
         client.user_id = 401
 
-        with self.assertLogs(
-            "robinhood.robinhood_api_logic", level="WARNING"
-        ) as logs:
+        with self.assertLogs("robinhood.api.account", level="WARNING") as logs:
             result = client.get_stock_order_history()
 
         self.assertIsNone(result)
@@ -1055,7 +1045,7 @@ class TestRobinhoodOptionFlow(unittest.TestCase):
         client.get_stock_info = Mock(return_value=None)
 
         with self.assertLogs(
-            "robinhood.robinhood_api_logic", level="WARNING"
+            "robinhood.api.market_data", level="WARNING"
         ) as logs:
             result = client.get_orderbook("SPY")
 

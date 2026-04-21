@@ -353,7 +353,7 @@ class IndexInfo(ApiPayloadMixin):
     simple_name: str
     symbol: str
     state: Literal["active", "inactive"]
-    tradable_chain_ids: list[str] | None
+    tradable_chain_ids: list[str]
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
