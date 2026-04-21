@@ -1,61 +1,30 @@
-from dataclasses import dataclass
-from types import NotImplementedType
-from typing import Any, ClassVar, Literal, Self, TypedDict
-from uuid import uuid4
+from __future__ import annotations
 
-from .constants import (
-    CURRENCY_PAIR_FLOAT_KEYS,
-    CURRENCY_PAIR_NON_FLOAT_KEYS,
-    FULL_QUOTE_FLOAT_KEYS,
-    FULL_QUOTE_INT_KEYS,
-    FULL_QUOTE_NON_FLOAT_KEYS,
-    FUTURE_FLOAT_KEYS,
-    INDEX_FLOAT_KEYS,
-    INDEX_NON_FLOAT_KEYS,
-    INSTRUMENTS_FLOAT_KEYS,
-    INSTRUMENTS_NON_FLOAT_KEYS,
-    OPTION_CHAIN_FLOAT_KEYS,
-    OPTION_CHAIN_INT_KEYS,
-    OPTION_CHAIN_NON_FLOAT_KEYS,
-    OPTION_GREEK_DATA_FLOAT_KEYS,
-    OPTION_GREEK_DATA_INT_KEYS,
-    OPTION_GREEK_DATA_NON_FLOAT_KEYS,
-    OPTION_INSTRUMENT_FLOAT_KEYS,
-    OPTION_INSTRUMENT_NON_FLOAT_KEYS,
-    OPTION_ORDER_FLOAT_KEYS,
-    OPTION_ORDER_LEG_FLOAT_KEYS,
-    OPTION_ORDER_LEG_INT_KEYS,
-    OPTION_ORDER_LEG_NON_FLOAT_KEYS,
-    OPTION_ORDER_NON_FLOAT_KEYS,
-    OPTION_POSITION_FLOAT_KEYS,
-    OPTION_POSITION_NON_FLOAT_KEYS,
-    OPTION_STRATEGY_NON_FLOAT_KEYS,
-    STOCK_INFO_FLOAT_KEYS,
-    STOCK_INFO_NON_FLOAT_KEYS,
-    STOCK_ORDER_FLOAT_KEYS,
-    STOCK_ORDER_NON_FLOAT_KEYS,
-    STOCK_POSITION_FLOAT_KEYS,
-    STOCK_POSITION_NON_FLOAT_KEYS,
-    OPTION_ORDER_RESPONSE_FLOAT_KEYS,
-    OPTION_ORDER_RESPONSE_NON_FLOAT_KEYS,
-)
+from dataclasses import dataclass
+from functools import cache
+from types import NotImplementedType
+from typing import Any, Literal, Self, TypedDict, get_type_hints
 
 
 class ApiPayloadMixin:
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = set()
-    _FLOAT_KEYS: ClassVar[set[str]] = set()
-    _INT_KEYS: ClassVar[set[str]] = set()
+    @classmethod
+    @cache
+    def _test(cls):
+        non_float_keys: set[str] = set()
+        float_keys: set[str] = set()
+        int_keys: set[str] = set()
+        for k, v in get_type_hints(cls).items():
+            if v is float:
+                float_keys.add(k)
+            elif v is int:
+                int_keys.add(k)
+            else:
+                non_float_keys.add(k)
+        return non_float_keys, float_keys, int_keys
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
-        return cls(
-            **ApiPayloadMixin._filter_dict(
-                payload,
-                cls._NON_FLOAT_KEYS,
-                cls._FLOAT_KEYS,
-                cls._INT_KEYS,
-            )
-        )
+        return cls(**cls._filter_dict(payload, *cls._test()))
 
     @staticmethod
     def _filter_dict(
@@ -91,8 +60,8 @@ class OptionRequest:
     side: Literal["sell", "buy"] | None = None
 
     def __mul__(self, num: int) -> list[Self]:
-        # if not isinstance(num, int):
-        #     return NotImplemented
+        if not isinstance(num, int):
+            raise NotImplementedType
         if num <= 0:
             raise ValueError(
                 f"{self.__class__.__name__} multiplier must be > 0"
@@ -123,24 +92,17 @@ class FullQuote(ApiPayloadMixin):
     updated_at: str
     instrument_id: str
     state: str
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = FULL_QUOTE_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = FULL_QUOTE_FLOAT_KEYS
-    _INT_KEYS: ClassVar[set[str]] = FULL_QUOTE_INT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
-class IndexQuote:
+class IndexQuote(ApiPayloadMixin):
     symbol: str
     value: float
     instrument_id: str
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
-        return cls(
-            payload["symbol"],
-            float(payload["value"]),
-            payload["instrument_id"],
-        )
+        return cls(**cls._filter_dict(payload, *cls._test()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,9 +126,6 @@ class OptionChain(ApiPayloadMixin):
     underlyings: list[dict]
     settle_on_open: bool
     sellout_time_to_expiration: int
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_CHAIN_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_CHAIN_FLOAT_KEYS
-    _INT_KEYS: ClassVar[set[str]] = OPTION_CHAIN_INT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,8 +153,6 @@ class OptionInstrument(ApiPayloadMixin):
     long_strategy_code: str
     short_strategy_code: str
     underlying_type: str
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_INSTRUMENT_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_INSTRUMENT_FLOAT_KEYS
 
     def __str__(self) -> str:
         return f"Symbol: {self.chain_symbol}, exp_date: {self.expiration_date}, type: {self.type}, strike_price: {self.strike_price}"  # noqa: E501
@@ -243,9 +200,6 @@ class OptionGreekData(ApiPayloadMixin):
     high_fill_rate_sell_price: float
     low_fill_rate_buy_price: float
     low_fill_rate_sell_price: float
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_GREEK_DATA_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_GREEK_DATA_FLOAT_KEYS
-    _INT_KEYS: ClassVar[set[str]] = OPTION_GREEK_DATA_INT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,12 +216,10 @@ class StockInfo(ApiPayloadMixin):
     maintenance_ratio: float
     country: str
     day_trade_ratio: float
-    min_tick_size: float | None
+    min_tick_size: float
     type: str
     tradable_chain_id: str | None
     short_selling_tradability: str
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = STOCK_INFO_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = STOCK_INFO_FLOAT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,8 +229,6 @@ class StockPosition(ApiPayloadMixin):
     type: str
     clearing_average_cost: float
     instrument_id: str
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = STOCK_POSITION_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = STOCK_POSITION_FLOAT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,8 +263,6 @@ class OptionPosition(ApiPayloadMixin):
     type: str
     updated_at: str
     url: str
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_POSITION_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_POSITION_FLOAT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,17 +280,9 @@ class StockOrder(ApiPayloadMixin):
     updated_at: str
     last_transaction_at: str | None
 
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = STOCK_ORDER_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = STOCK_ORDER_FLOAT_KEYS
-
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
-        data = ApiPayloadMixin._filter_dict(
-            payload,
-            cls._NON_FLOAT_KEYS,
-            cls._FLOAT_KEYS,
-            cls._INT_KEYS,
-        )
+        data = cls._filter_dict(payload, *cls._test())
         total_notional = payload.get("total_notional") or {}
         data["price"] = float(total_notional.get("amount", 0.0) or 0.0)
         return cls(**data)
@@ -355,10 +295,6 @@ class OptionOrderLeg(ApiPayloadMixin):
     option_type: str
     strike_price: float
     ratio_quantity: int
-
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_LEG_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_LEG_FLOAT_KEYS
-    _INT_KEYS: ClassVar[set[str]] = OPTION_ORDER_LEG_INT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,20 +310,10 @@ class OptionOrderHistory(ApiPayloadMixin):
     updated_at: str
     legs: list[OptionOrderLeg]
 
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_FLOAT_KEYS
-
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
-        data = ApiPayloadMixin._filter_dict(
-            payload,
-            cls._NON_FLOAT_KEYS,
-            cls._FLOAT_KEYS,
-            cls._INT_KEYS,
-        )
-
+        data = cls._filter_dict(payload, *cls._test())
         data["price"] = float(payload.get("net_amount", 0.0) or 0.0)
-
         data["legs"] = [
             OptionOrderLeg.from_json(leg) for leg in payload.get("legs", [])
         ]
@@ -422,23 +348,16 @@ class OrderBook:
 
 
 @dataclass(frozen=True, slots=True)
-class IndexInfo:
+class IndexInfo(ApiPayloadMixin):
     id: str
-    name: str
+    simple_name: str
     symbol: str
     state: Literal["active", "inactive"]
     tradable_chain_ids: list[str] | None
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
-        data = {}
-        data["id"] = payload["id"]
-        data["name"] = payload["simple_name"]
-        data["symbol"] = payload["symbol"]
-        chain_ids = payload["tradable_chain_ids"]
-        data["state"] = payload["state"]
-        data["tradable_chain_ids"] = chain_ids if chain_ids else None
-        return cls(**data)
+        return cls(**cls._filter_dict(payload, *cls._test()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -450,8 +369,6 @@ class Index(ApiPayloadMixin):
     low: float
     high_52_weeks: float
     low_52_weeks: float
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = INDEX_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = INDEX_FLOAT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -462,8 +379,6 @@ class CurrencyPair(ApiPayloadMixin):
     market_cap: float
     high_52_weeks: float
     low_52_weeks: float
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = CURRENCY_PAIR_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = CURRENCY_PAIR_FLOAT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -479,8 +394,6 @@ class Instrument(ApiPayloadMixin):
     high_52_weeks: float
     low_52_weeks: float
     pe_ratio: float
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = INSTRUMENTS_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = INSTRUMENTS_FLOAT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
@@ -489,12 +402,10 @@ class Future(ApiPayloadMixin):
     object_id: str
     name: str
     futures_margin_requirement: float
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = FULL_QUOTE_NON_FLOAT_KEYS
-    _FLOAT_KEYS: ClassVar[set[str]] = FUTURE_FLOAT_KEYS
 
 
 @dataclass(frozen=True, slots=True)
-class OptionStrategy:
+class OptionStrategy(ApiPayloadMixin):
     object_id: str
     open_price_direction: str
     name: str
@@ -503,7 +414,9 @@ class OptionStrategy:
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
-        data = {k: payload[k] for k in OPTION_STRATEGY_NON_FLOAT_KEYS}
+        non_float_keys, float_keys, int_keys = cls._test()
+        float_keys = float_keys - {"open_price_without_tvm"}
+        data = cls._filter_dict(payload, non_float_keys, float_keys, int_keys)
         data["open_price_without_tvm"] = float(
             payload["open_price_without_tvm"]["amount"]
         )
@@ -534,7 +447,7 @@ class OptionOrder:
     override_day_trade_checks: str = "false"
     price: float
     quantity: int
-    ref_id: str = str(uuid4())
+    ref_id: str
     time_in_force: str = "gfd"
     trigger: str = "immediate"
     type: str = "limit"
@@ -549,5 +462,3 @@ class OptionOrderResponse(ApiPayloadMixin):
     premium: float
     estimated_total_new_amount: float
     strategy: str
-    _FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_RESPONSE_FLOAT_KEYS
-    _NON_FLOAT_KEYS: ClassVar[set[str]] = OPTION_ORDER_RESPONSE_NON_FLOAT_KEYS

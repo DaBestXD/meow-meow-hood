@@ -22,6 +22,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Literal, overload
+from uuid import uuid4
 
 from dotenv import load_dotenv
 
@@ -756,6 +757,7 @@ class Robinhood:
         p = OptionOrder(
             account=BASE_API_LINK + f"accounts/{self.user_id}",
             legs=legs,
+            ref_id=str(uuid4()),
             direction=order_type,
             price=limit_price,
             quantity=quantity,

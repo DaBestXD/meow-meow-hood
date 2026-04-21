@@ -117,9 +117,9 @@ class TestApiDataclasses(unittest.TestCase):
 
         index_info = IndexInfo.from_json(payload)
 
-        self.assertEqual("CBOE Volatility Index", index_info.name)
+        self.assertEqual("CBOE Volatility Index", index_info.simple_name)
         self.assertEqual("VIX", index_info.symbol)
-        self.assertIsNone(index_info.tradable_chain_ids)
+        self.assertEqual([], index_info.tradable_chain_ids)
 
     def test_index_quote_from_json_coerces_numeric_value(self):
         quote = IndexQuote.from_json(build_index_quote_payload(value="19.45"))

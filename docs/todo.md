@@ -2,7 +2,7 @@
 
 ## Priority TODO
 
-- Add buying and selling positions for stocks and options
+- Add buying and selling positions for stocks(Options done, multi leg support included!)
 
 - Add ability to store equity information into db for long term storage
 
