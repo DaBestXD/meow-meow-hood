@@ -462,3 +462,51 @@ class OptionOrderResponse(ApiPayloadMixin):
     premium: float
     estimated_total_new_amount: float
     strategy: str
+
+
+@dataclass(frozen=True, slots=True)
+class FuturesProduct(ApiPayloadMixin):
+    id: str
+    symbol: str
+    displaySymbol: str
+    description: str
+    priceIncrements: float
+    activeFuturesContractId: str
+    simpleName: str
+    settlementStartTime: str
+
+
+@dataclass(frozen=True, slots=True)
+class FuturesContract(ApiPayloadMixin):
+    id: str
+    productId: str
+    symbol: str
+    displaySymbol: str
+    description: str
+    multiplier: float
+    expirationMmy: str
+    expiration: str
+    customerLastCloseDate: str
+    tradability: str
+    state: str
+    settlementStartTime: str
+    firstTradeDate: str
+    settlementDate: str
+
+
+@dataclass(frozen=True, slots=True)
+class FuturesQuote(ApiPayloadMixin):
+    ask_price: float
+    ask_size: int
+    ask_venue_timestamp: str
+    bid_price: float
+    bid_size: int
+    bid_venue_timestamp: str
+    last_trade_price: float
+    last_trade_size: int
+    last_trade_venue_timestamp: str
+    symbol: str
+    instrument_id: str
+    state: str
+    updated_at: str
+    out_of_band: bool

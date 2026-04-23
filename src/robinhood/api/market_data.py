@@ -1,22 +1,34 @@
 from __future__ import annotations
 
 import logging
+from functools import cache
 from typing import overload
 
 from ..api_dataclasses import (
     FullQuote,
+    FuturesContract,
+    FuturesProduct,
+    FuturesQuote,
     IndexInfo,
     IndexQuote,
     OrderBook,
     StockInfo,
 )
 from ..constants import (
+    API_FUTURES_CONTRACTS,
+    API_FUTURES_PRODUCTS,
+    API_FUTURES_QUOTES,
     API_INDEX_QUOTE,
     API_INDEXES,
     API_INSTRUMENTS,
     API_ORDERBOOK,
     API_QUOTES,
+    DATA,
+    PARAM_ID,
+    PARAM_PRODUCT_IDS,
     PARAM_SYMBOLS,
+    STATUS,
+    SUCCESS,
 )
 from ._base import RobinhoodBase
 
@@ -127,3 +139,110 @@ class MarketDataMixin(RobinhoodBase):
             logger.warning("%s returned none", symbol)
             return None
         return OrderBook.from_json(res_json[0])
+
+    # A note on the futures endpoint due to how Robinhood
+    # handles params and filtering single symbol look-ups
+    # should prob be used...
+    # This endpoint is complete garbage nested return vals😾
+
+    # no need to raise ValueError if incorrect type is used
+    # some faith in the user is required...
+    def get_future_info(self, symbol: str) -> FuturesProduct | None:
+        """
+        This is a convience function that calls `get_all_futures_products`
+        and filters for the symbols.
+        Symbols should be as follows:
+        /ES not specific future contracts like /ESM26,
+        """
+        futures_prods = self.get_all_futures_products()
+        if not futures_prods:
+            # get_all_futures_products has a warning logger already
+            # if no reponse back
+            return None
+        for i, f in enumerate(futures_prods):
+            if f.displaySymbol.startswith(symbol):
+                return futures_prods[i]
+        logger.warning("%s was not found", symbol)
+        return None
+
+    @overload
+    def get_future_quote(
+        self,
+        ids: str,
+    ) -> FuturesQuote | None: ...
+
+    @overload
+    def get_future_quote(
+        self,
+        ids: list[str],
+    ) -> list[FuturesQuote] | None: ...
+
+    def get_future_quote(
+        self,
+        ids: str | list[str],
+    ) -> list[FuturesQuote] | FuturesQuote | None:
+        """
+        Accepts either exact symbols such as /ESM26
+        or actual contract id
+        Using exact symbols has some overhead costs,
+        suggested to use contract ids.
+        Use exact symbol name ex: /ESM26, forward slash is not optional
+        """
+        if isinstance(ids, str):
+            ids = [ids]
+        if len(ids) > 20:
+            raise ValueError("max amount of ids is 20")
+        params = {PARAM_ID: ",".join(ids)}
+        res_json = self._http_client._get(API_FUTURES_QUOTES, params)
+        if not res_json or not (quote_list := res_json[0][DATA]):
+            logger.warning("No valid quotes were returned for ids")
+            return None
+        quotes: list[FuturesQuote] = []
+        for n in quote_list:
+            if n[STATUS] != SUCCESS:
+                continue
+            quotes.append(FuturesQuote.from_json(n[DATA]))
+        if not quotes:
+            return None
+        if isinstance(ids, str):
+            return quotes[0]
+        return quotes
+
+    @cache
+    def get_all_futures_products(
+        self,
+    ) -> list[FuturesProduct] | None:
+        """
+        Return a list of all Futures Products
+        Runtime cache idk how this will impact memory usage but
+        I can't be assed to create a new table and entries, and
+        table prunning, etc...
+        Def a todo and move away from @cache deco.
+        """
+        res_json = self._http_client._get(API_FUTURES_PRODUCTS)
+        if not res_json:
+            logger.warning("Unable to retrieve futures products list")
+            return None
+        futures = [FuturesProduct.from_json(f) for f in res_json if f]
+        # In the event of a completly empty list return None
+        # though this shouldn't really matter
+        # and I should prob change this for all return values later
+        # Just leaving this here as a placeholder/reminder
+        return None if not futures else futures
+
+    def get_active_contracts_for_id(
+        self, id: str
+    ) -> list[FuturesContract] | None:
+        """
+        Take a future product id and returns all active contracts
+        Sorted by earliest expiration
+        Contract id can be found from a FuturesProduct's id var
+        """
+        params = {PARAM_PRODUCT_IDS: id}
+        res_json = self._http_client._get(API_FUTURES_CONTRACTS, params)
+        if not res_json:
+            logger.warning("No contracts returned for %s", id)
+            return None
+        future_contracts = [FuturesContract.from_json(f) for f in res_json if f]
+        future_contracts.sort(key=lambda fut: fut.expirationMmy)
+        return future_contracts
