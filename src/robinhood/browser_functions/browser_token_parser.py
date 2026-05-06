@@ -14,7 +14,7 @@ from pathlib import Path
 import requests
 import snappy
 
-from .constants import ACCOUNT_NUMBER, API_ACCOUNT, RESULTS
+from robinhood.constants import ACCOUNT_NUMBER, API_ACCOUNT, RESULTS
 
 CHROME_DB_NAME = Path("https_robinhood.com_0.indexeddb.leveldb")
 HOME_DIR = Path.home()

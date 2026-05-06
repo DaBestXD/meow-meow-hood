@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import json
+
 #  __    __     ______     ______     __     __
 # /\ "-./  \   /\  ___\   /\  __ \   /\ \  _ \ \
 # \ \ \-./\ \  \ \  __\   \ \ \/\ \  \ \ \/ ".\ \
@@ -18,12 +21,19 @@ from __future__ import annotations
 # 🐈
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any
 
 from dotenv import load_dotenv
 
+from robinhood.browser_functions.browser_token_parser import (
+    Browser,
+    auto_open_browser,
+    get_acc_id,
+    get_token,
+)
 from robinhood.configure_logger import MISSING, configure_logger
 from robinhood.db_logic.option_cache import OptionCache
 from robinhood.set_up_script import set_up
@@ -34,12 +44,6 @@ from .api import (
     MarketDataMixin,
     OptionsMixin,
     TradingMixin,
-)
-from .browser_token_parser import (
-    Browser,
-    auto_open_browser,
-    get_acc_id,
-    get_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,15 +140,32 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
         self._http_client.close()
         logger.info("Robinhood Client Closed")
 
-    def refresh_access_token(self, browser: Browser) -> None:
+    def refresh_access_token(
+        self, access_token: str, browser: Browser
+    ) -> dict[str, Any]:
         """
-        This function should only need to be run once a week.
-        In theory as long as you keep running this function it should
-        refresh the access token. Opening the browser is necessary
-        for refreshing the access token.
-        pkill/taskKill is the easiest way to clean up the open browser
-        though not ideal as it closes all the entire browser.
+        Use browser that you are logged into.
         """
+        # Plan decode JWT token check if expiration date is within a random
+        # amount of days (1-7) ?
+        # Not sure how robinhood determines when to log out user browser side
+        # if it falls within this range open browser, then put db entry that
+        # browser was last opened when / or just check the local storage
+        # last access date that is probably easier.
+        # Yeah the db plan is probably stupid nvm XD
+        # Then have a guard against 403 / 401 errors to reset the currently
+        # stored access_token
+        # return the expiration time so you can just check when auth should be
+        # changed ?
+        token = str(self._http_client.session.headers["Authorization"])
+        payload_b64 = token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload: dict[str, Any] = json.loads(
+            base64.urlsafe_b64decode(payload_b64).decode()
+        )
+        exp_date = int(payload["exp"])
+        print(datetime.fromtimestamp(exp_date).strftime("%Y-%m-%d %H:%M"))
+        return payload
         auto_open_browser(browser)
         if not self.env_path:
             logger.warning("No env path was provided. Not writing to env")

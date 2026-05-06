@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import overload
 
-from robinhood import OptionChain, OptionInstrument, OptionRequest
+from robinhood import OptionChain, OptionInstrument, OptionRequest, StockInfo
 
 from .._http_client import RobinhoodHTTPClient
 from ..db_logic.option_cache import OptionCache
@@ -33,3 +33,13 @@ class RobinhoodBase:
         chain_symbol_pair: dict[str, str],
     ) -> list[OptionInstrument]:
         raise NotImplementedError
+
+    @overload
+    def get_stock_info(self, symbols: str) -> StockInfo | None: ...
+
+    @overload
+    def get_stock_info(self, symbols: list[str]) -> list[StockInfo] | None: ...
+
+    def get_stock_info(
+        self, symbols: str | list[str]
+    ) -> StockInfo | list[StockInfo] | None: ...
