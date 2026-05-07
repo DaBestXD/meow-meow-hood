@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import base64
-import json
-
 #  __    __     ______     ______     __     __
 # /\ "-./  \   /\  ___\   /\  __ \   /\ \  _ \ \
 # \ \ \-./\ \  \ \  __\   \ \ \/\ \  \ \ \/ ".\ \
@@ -27,13 +24,11 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from robinhood.browser_functions.blah import refresh_access_token
 from robinhood.browser_functions.browser_token_parser import (
-    Browser,
-    auto_open_browser,
     get_acc_id,
     get_token,
 )
+from robinhood.browser_functions.token_functions import _refresh_access_token
 from robinhood.configure_logger import MISSING, configure_logger
 from robinhood.db_logic.option_cache import OptionCache
 from robinhood.set_up_script import set_up
@@ -147,7 +142,7 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
         """
         access_token = str(self._http_client.session.headers["Authorization"])
         env_path = self.env_path if self.env_path else ""
-        token = refresh_access_token(
+        token = _refresh_access_token(
             access_token,
             env_path,
             True if self.env_path else False,

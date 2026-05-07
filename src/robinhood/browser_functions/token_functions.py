@@ -102,10 +102,10 @@ def file_stat(browser: Browser) -> int:
     raise ValueError("unable to find db_file stat")
 
 
-def check_if_modified_date_within_range(days: int = 30) -> bool:
+def check_if_modified_date_within_range(days: int = 7) -> bool:
     """
     Check if the last modified date is within a certain range,
-    default is 30 days. If this fails the check you will most likely
+    default is 7 days. If this fails the check you will most likely
     need to relogin into robinhood manually
     """
     last_mod = -1
@@ -122,7 +122,7 @@ def check_if_modified_date_within_range(days: int = 30) -> bool:
     return last_mod >= days
 
 
-def refresh_access_token(
+def _refresh_access_token(
     access_token: str,
     env_path: str | PathLike[str],
     write_env: bool,
@@ -135,19 +135,16 @@ def refresh_access_token(
     you will need to manually log back into Robinhood
     """
     token_exp = return_access_token_expiry(access_token)
-    if not token_exp > int(time.time()):
+    if not (token_exp <= int(time.time())):
         logger.info("Access token is not expired, exp: %s", str(token_exp))
         return None
     # Raise error if there's no way to recover the auth token
-    if (
-        token_exp <= int(time.time())
-        and not check_if_modified_date_within_range()
-    ):
+    if token_exp <= int(time.time()) and check_if_modified_date_within_range():
         raise RuntimeError(
             """Token is expired and auth modified date is greater than 30 days.
             You will need to relogin manually"""
         )
-    elif not token_exp > int(time.time()):
+    elif token_exp <= int(time.time()):
         # if the token is expired but its within the mod period
         access_token, _ = get_token(
             env_path=env_path, write_env=write_env, open_browser=True
