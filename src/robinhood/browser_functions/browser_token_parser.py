@@ -7,6 +7,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -195,11 +196,13 @@ def get_token(
         account_number = get_acc_id(bearer_token)
         if isinstance(account_number, str):
             break
-
-    assert bearer_token, """
+    if not bearer_token:
+        raise RuntimeError(
+            textwrap.dedent("""
         Unable to find bearer_token make sure you are logged into robinhood
         on the selected browser.
-    """
+    """)
+        )
 
     account_number = get_acc_id(bearer_token)
     if (account_number == 401 or account_number == 403) and open_browser:
@@ -207,7 +210,8 @@ def get_token(
         auto_open_browser(Chrome())
         return get_token(env_path, write_env, (not open_browser))
 
-    assert isinstance(account_number, str), "Unable to find account_number"
+    if not isinstance(account_number, str):
+        raise RuntimeError("Unable to find account number")
 
     if write_env:
         with open(env_path, "w") as f:

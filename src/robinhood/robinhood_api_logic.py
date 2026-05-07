@@ -21,13 +21,13 @@ import json
 # 🐈
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any
 
 from dotenv import load_dotenv
 
+from robinhood.browser_functions.blah import refresh_access_token
 from robinhood.browser_functions.browser_token_parser import (
     Browser,
     auto_open_browser,
@@ -140,39 +140,20 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
         self._http_client.close()
         logger.info("Robinhood Client Closed")
 
-    def refresh_access_token(
-        self, access_token: str, browser: Browser
-    ) -> dict[str, Any]:
+    def refresh_access_token(self) -> None:
         """
-        Use browser that you are logged into.
+        Function that will automatically open browser if token is expired,
+        and attempts to retrieve a new token
         """
-        # Plan decode JWT token check if expiration date is within a random
-        # amount of days (1-7) ?
-        # Not sure how robinhood determines when to log out user browser side
-        # if it falls within this range open browser, then put db entry that
-        # browser was last opened when / or just check the local storage
-        # last access date that is probably easier.
-        # Yeah the db plan is probably stupid nvm XD
-        # Then have a guard against 403 / 401 errors to reset the currently
-        # stored access_token
-        # return the expiration time so you can just check when auth should be
-        # changed ?
-        token = str(self._http_client.session.headers["Authorization"])
-        payload_b64 = token.split(".")[1]
-        payload_b64 += "=" * (-len(payload_b64) % 4)
-        payload: dict[str, Any] = json.loads(
-            base64.urlsafe_b64decode(payload_b64).decode()
+        access_token = str(self._http_client.session.headers["Authorization"])
+        env_path = self.env_path if self.env_path else ""
+        token = refresh_access_token(
+            access_token,
+            env_path,
+            True if self.env_path else False,
         )
-        exp_date = int(payload["exp"])
-        print(datetime.fromtimestamp(exp_date).strftime("%Y-%m-%d %H:%M"))
-        return payload
-        auto_open_browser(browser)
-        if not self.env_path:
-            logger.warning("No env path was provided. Not writing to env")
-            token, _ = get_token("", write_env=False)
-        else:
-            token, _ = get_token(self.env_path)
-        self._http_client.session.headers["Authorization"] = f"Bearer {token}"
+        if isinstance(token, str):
+            self._http_client.session.headers["Authorization"] = token
         return None
 
     def execute_custom_sql(
