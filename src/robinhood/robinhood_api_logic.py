@@ -25,10 +25,15 @@ from typing import Any
 from dotenv import load_dotenv
 
 from robinhood.browser_functions.browser_token_parser import (
+    Browser,
+    auto_open_browser,
     get_acc_id,
     get_token,
 )
-from robinhood.browser_functions.token_functions import _refresh_access_token
+from robinhood.browser_functions.token_functions import (
+    _refresh_access_token,
+    check_if_modified_date_within_range,
+)
 from robinhood.configure_logger import MISSING, configure_logger
 from robinhood.db_logic.option_cache import OptionCache
 from robinhood.set_up_script import set_up
@@ -134,6 +139,21 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
             self._db_cache = None
         self._http_client.close()
         logger.info("Robinhood Client Closed")
+
+    def open_browser(
+        self,
+        browser: Browser,
+        wait_time: int = 10,
+        days: int = 1,
+    ) -> None:
+        """
+        Checks if the last modified date is greater than one day,
+        then open the browser pointed at robinhood, closes after
+        N seconds(default is 10 seconds)
+        """
+        if not check_if_modified_date_within_range(days=days):
+            auto_open_browser(browser, wait_time=wait_time)
+        return None
 
     def refresh_access_token(self) -> None:
         """
