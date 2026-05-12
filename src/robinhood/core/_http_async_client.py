@@ -1,0 +1,120 @@
+import logging
+from typing import Any
+
+import aiohttp
+
+from robinhood.constants import BASE_API_LINK, RESULTS
+
+logger = logging.getLogger(__name__)
+
+
+class RobinhoodAsyncHTTPClient:
+    def __init__(self, access_token: str, user_agent: str | None) -> None:
+        self.session: aiohttp.ClientSession | None = None
+        self.access_token: str = access_token
+        self.user_agent = user_agent
+
+    async def close(self) -> None:
+        if not self.session:
+            return None
+        await self.session.close()
+
+    # This should be blocking maybe?
+    def _error_status_code_handler(
+        self, endpoint: str, status_code: int
+    ) -> None:
+        """
+        Current logic is to sleep for 65 seconds after hitting a rate limit.
+        No retry is attempted and an empty value is returned
+        """
+        if status_code >= 500:
+            # TODO: add retry logic for 5XX errors
+            raise NotImplementedError
+        if status_code == 429:
+            logger.warning("429 error returned, you are being rate limited.")
+            # TODO: change this to a hardblock maybe sleep for a minute?
+            raise NotImplementedError
+        if status_code == 403 or status_code == 401:
+            # TODO: raise error here
+            logger.critical("Access token invalid, relogin into robinhood")
+        else:
+            logger.warning("%s returned: %d", endpoint, status_code)
+        return None
+
+    async def create_client_session(self) -> aiohttp.ClientSession:
+        if not self.session:
+            timeout = aiohttp.ClientTimeout(total=15, connect=5)
+            headers = {"Authorization": f"Bearer {self.access_token}"}
+            if self.user_agent:
+                headers["User-Agent"] = self.user_agent
+            self.session = aiohttp.ClientSession(
+                headers=headers,
+                timeout=timeout,
+            )
+        return self.session
+
+    async def _page_get(self, endpoint: str, results: list[dict]) -> list[dict]:
+        session = await self.create_client_session()
+        while True:
+            logger.debug(
+                "GET request: %s, %s", endpoint, self._page_get.__name__
+            )
+            try:
+                async with session.get(url=endpoint) as res:
+                    res.raise_for_status()
+                    res_json = await res.json()
+                    endpoint = res_json.get("next")
+                    results.extend(res_json.get(RESULTS, []))
+                    if not endpoint:
+                        break
+            except aiohttp.ClientResponseError as e:
+                self._error_status_code_handler(endpoint, e.status)
+        return results
+
+    async def _get(
+        self,
+        endpoint: str,
+        base_api_link: str = BASE_API_LINK,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        session = await self.create_client_session()
+        async with session.get(
+            url=base_api_link + endpoint,
+            params=params,
+        ) as res:
+            res.raise_for_status()
+            res_json = await res.json()
+            next_link: str | None = res_json.get("next")
+            if not next_link:
+                return res_json.get(RESULTS, [res_json])
+            return await self._page_get(
+                next_link, results=res_json.get(RESULTS, [])
+            )
+
+    async def _post(
+        self,
+        endpoint: str,
+        base_api_link: str = BASE_API_LINK,
+        data: dict | None = None,
+        json: dict | None = None,
+    ) -> dict | None:
+        session = await self.create_client_session()
+        try:
+            async with session.post(
+                url=base_api_link + endpoint,
+                data=data,
+                json=json,
+            ) as res:
+                res.raise_for_status()
+                logger.debug(
+                    "POST request: %s, data length: %d",
+                    endpoint,
+                    len(data) if data else 0,
+                )
+                return await res.json()
+        except aiohttp.ClientResponseError as e:
+            self._error_status_code_handler(endpoint, e.status)
+
+    async def _connect_to_ws(self, endpoint: str):
+        # Refer to futures_orderbook.md file inside experimental folder
+        raise NotImplementedError

@@ -4,13 +4,13 @@ import logging
 from collections import defaultdict
 from typing import Any, overload
 
-from ..api_dataclasses import (
+from robinhood.api_dataclasses import (
     OptionChain,
     OptionGreekData,
     OptionInstrument,
     OptionRequest,
 )
-from ..constants import (
+from robinhood.constants import (
     API_INSTRUMENTS,
     API_OPTION_CHAINS,
     API_OPTIONS_GREEKS_DATA,
@@ -25,14 +25,17 @@ from ..constants import (
     PARAM_SYMBOLS,
     PARAM_TRADABLE_CHAIN_ID,
 )
-from ..option_matching import map_option_requests_to_ois, match_req_to_oi
-from ._base import RobinhoodBase
+from robinhood.core._typing_base import TypingBase
+from robinhood.option_matching import (
+    map_option_requests_to_ois,
+    match_req_to_oi,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class OptionsMixin(RobinhoodBase):
-    def get_expiration_dates(self, symbol: str) -> list[str] | None:
+class OptionsImpl(TypingBase):
+    async def _get_expiration_dates(self, symbol: str) -> list[str] | None:
         """
         Returns option_expiration dates for a given symbol as
         a list of strings, date format in yyyy-mm-dd
@@ -42,11 +45,13 @@ class OptionsMixin(RobinhoodBase):
             if dates:
                 logger.debug(
                     "%s cache hit for %s",
-                    self.get_expiration_dates.__name__,
+                    self._get_expiration_dates.__name__,
                     symbol,
                 )
                 return dates
-        res_json = self._http_client._get(API_OPTION_CHAINS + f"{symbol}/")
+        res_json = await self._async_http_client._get(
+            API_OPTION_CHAINS + f"{symbol}/"
+        )
         if not res_json:
             logger.warning("No expiration dates found for %s", symbol)
             return None
@@ -57,7 +62,7 @@ class OptionsMixin(RobinhoodBase):
                 self._db_cache.sync_option_chain(c.symbol)
         return chains[0].expiration_dates if chains else []
 
-    def get_strike_prices(
+    async def _get_strike_prices(
         self, *, symbol: str, exp_date: str
     ) -> dict[OptionRequest, list[float]]:
         """
@@ -75,7 +80,7 @@ class OptionsMixin(RobinhoodBase):
         ):
             logger.debug(
                 "%s cache hit for %s",
-                self.get_strike_prices.__name__,
+                self._get_strike_prices.__name__,
                 symbol,
             )
             return {
@@ -84,7 +89,7 @@ class OptionsMixin(RobinhoodBase):
             }
         chain = self._db_cache.get_chain_id(symbol) if self._db_cache else None
         if not chain:
-            chain = self.get_option_chain_data(symbol)
+            chain = await self._get_option_chain_data(symbol)
             if chain:
                 chain = chain.id
         if not chain:
@@ -99,7 +104,10 @@ class OptionsMixin(RobinhoodBase):
             PARAM_EXPIRATION_DATE: exp_date,
             PARAM_OPTION_STATE: "active",
         }
-        options = self._http_client._get(API_OPTIONS_INSTRUMENTS, params)
+        options = await self._async_http_client._get(
+            endpoint=API_OPTIONS_INSTRUMENTS,
+            params=params,
+        )
         oi_list = [OptionInstrument.from_json(o) for o in options if o]
         if self._db_cache:
             self._db_cache.insert_option_instrument(oi_list)
@@ -133,7 +141,7 @@ class OptionsMixin(RobinhoodBase):
         )
         return {call_request: call_strikes, put_request: put_strikes}
 
-    def _resolve_option_greeks_from_ids(
+    async def _resolve_option_greeks_from_ids(
         self,
         option_requests: list[OptionRequest],
         requests_to_ids: dict[OptionRequest, list[str]],
@@ -153,7 +161,7 @@ class OptionsMixin(RobinhoodBase):
         op_greek_list: list[OptionGreekData] = []
         for i in range(0, len(all_op_ids), 200):
             op_greek_list.extend(
-                self._get_option_greek_data(all_op_ids[i : i + 200])
+                await self._get_option_greek_data(all_op_ids[i : i + 200])
             )
         greeks_by_id = {o.instrument_id: o for o in op_greek_list}
         return {
@@ -165,7 +173,7 @@ class OptionsMixin(RobinhoodBase):
             for request in option_requests
         }
 
-    def no_db_option_greeks_batch_request(
+    async def _no_db_option_greeks_batch_request(
         self,
         option_requests: list[OptionRequest],
     ) -> dict[OptionRequest, list[OptionGreekData]]:
@@ -175,9 +183,11 @@ class OptionsMixin(RobinhoodBase):
         Option Chain Data --> Option Instrument Data --> Option Greek Data
         """
         if len(option_requests) == 1:
-            chains = self.get_option_chain_data(option_requests[0].symbol)
+            chains = await self._get_option_chain_data(
+                option_requests[0].symbol
+            )
         else:
-            chains = self.get_option_chain_data(
+            chains = await self._get_option_chain_data(
                 [o.symbol for o in option_requests]
             )
         if not chains:
@@ -187,7 +197,7 @@ class OptionsMixin(RobinhoodBase):
             chain_symbol_pair = {chains.symbol: chains.id}
         else:
             chain_symbol_pair = {c.symbol: c.id for c in chains}
-        opt_instruments = self._get_oi_helper(
+        opt_instruments = await self._get_oi_helper(
             option_requests, chain_symbol_pair
         )
         req_to_ids: dict[OptionRequest, list[str]] = defaultdict(list)
@@ -196,9 +206,11 @@ class OptionsMixin(RobinhoodBase):
                 if not match_req_to_oi(o, oi):
                     continue
                 req_to_ids[o].append(oi.id)
-        return self._resolve_option_greeks_from_ids(option_requests, req_to_ids)
+        return await self._resolve_option_greeks_from_ids(
+            option_requests, req_to_ids
+        )
 
-    def _get_oi_helper(
+    async def _get_oi_helper(
         self,
         option_requests: list[OptionRequest],
         chain_symbol_pair: dict[str, str],
@@ -210,7 +222,6 @@ class OptionsMixin(RobinhoodBase):
         res_json: list[dict] = []
         for o in option_requests:
             params: dict[str, Any] = {
-                PARAM_EXPIRATION_DATE: o.exp_date,
                 PARAM_CHAIN_ID: chain_symbol_pair[o.symbol],
                 PARAM_OPTION_STATE: "active",
             }
@@ -218,8 +229,10 @@ class OptionsMixin(RobinhoodBase):
                 params[PARAM_OPTION_TYPE] = o.option_type
             if o.strike_price:
                 params[PARAM_OPTION_STRIKE_PRICE] = o.strike_price
+            if o.exp_date:
+                params[PARAM_EXPIRATION_DATE] = o.exp_date
             res_json.extend(
-                self._http_client._get(
+                await self._async_http_client._get(
                     endpoint=API_OPTIONS_INSTRUMENTS, params=params
                 )
             )
@@ -238,22 +251,27 @@ class OptionsMixin(RobinhoodBase):
         return return_val
 
     @overload
-    def get_option_chain_data(self, symbol: str) -> OptionChain | None: ...
+    async def _get_option_chain_data(
+        self, symbol: str
+    ) -> OptionChain | None: ...
 
     @overload
-    def get_option_chain_data(
+    async def _get_option_chain_data(
         self, symbol: list[str]
     ) -> list[OptionChain] | None: ...
 
-    def get_option_chain_data(
+    async def _get_option_chain_data(
         self, symbol: str | list[str]
     ) -> list[OptionChain] | OptionChain | None:
         """Return option chain metadata for one symbol or many symbols."""
         if isinstance(symbol, str):
-            res_json = self._http_client._get(API_OPTION_CHAINS + f"{symbol}/")
+            res_json = await self._async_http_client._get(
+                API_OPTION_CHAINS + f"{symbol}/"
+            )
         else:
-            chain_rows = self._http_client._get(
-                API_INSTRUMENTS, {PARAM_SYMBOLS: ",".join(symbol)}
+            chain_rows = await self._async_http_client._get(
+                endpoint=API_INSTRUMENTS,
+                params={PARAM_SYMBOLS: ",".join(symbol)},
             )
             if not chain_rows:
                 return None
@@ -264,8 +282,9 @@ class OptionsMixin(RobinhoodBase):
             ]
             if not chain_ids:
                 return None
-            res_json = self._http_client._get(
-                API_OPTION_CHAINS, {PARAM_ID: ",".join(chain_ids)}
+            res_json = await self._async_http_client._get(
+                endpoint=API_OPTION_CHAINS,
+                params={PARAM_ID: ",".join(chain_ids)},
             )
         if not res_json:
             return None
@@ -276,7 +295,7 @@ class OptionsMixin(RobinhoodBase):
                 self._db_cache.sync_option_chain(c.symbol)
         return return_val if len(return_val) > 1 else return_val[0]
 
-    def _get_option_greek_data(
+    async def _get_option_greek_data(
         self, option_ids: list[str]
     ) -> list[OptionGreekData]:
         """
@@ -284,9 +303,9 @@ class OptionsMixin(RobinhoodBase):
         """
         joined_option_ids = ",".join(option_ids)
         if not joined_option_ids:
-            print("warning no option id supplied")
+            logger.warning("warning no option id supplied")
             return []
-        res_json = self._http_client._get(
+        res_json = await self._async_http_client._get(
             endpoint=API_OPTIONS_GREEKS_DATA,
             params={PARAM_OPTION_IDS: joined_option_ids},
         )
@@ -299,7 +318,7 @@ class OptionsMixin(RobinhoodBase):
         return_val = [OptionGreekData.from_json(o) for o in res_json if o]
         return return_val
 
-    def get_option_greeks_batch_request(
+    async def _get_option_greeks_batch_request(
         self,
         option_requests: OptionRequest | list[OptionRequest],
     ) -> dict[OptionRequest, list[OptionGreekData]]:
@@ -307,7 +326,9 @@ class OptionsMixin(RobinhoodBase):
         if isinstance(option_requests, OptionRequest):
             option_requests = [option_requests]
         if not self._db_cache:
-            return self.no_db_option_greeks_batch_request(option_requests)
+            return await self._no_db_option_greeks_batch_request(
+                option_requests
+            )
 
         cached_requests: list[OptionRequest] = []
         req_to_ids: dict[OptionRequest, list[str]] = {}
@@ -321,14 +342,14 @@ class OptionsMixin(RobinhoodBase):
         if cached_requests:
             logger.debug(
                 "%s cache hit for %s",
-                self.get_option_greeks_batch_request.__name__,
+                self._get_option_greeks_batch_request.__name__,
                 ", ".join(dict.fromkeys(r.symbol for r in cached_requests)),
             )
-        return_val = self._resolve_option_greeks_from_ids(
+        return_val = await self._resolve_option_greeks_from_ids(
             cached_requests, req_to_ids
         )
         if missed_cache_hits:
             return_val.update(
-                self.no_db_option_greeks_batch_request(missed_cache_hits)
+                await self._no_db_option_greeks_batch_request(missed_cache_hits)
             )
         return return_val

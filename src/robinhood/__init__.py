@@ -38,7 +38,8 @@ from .api_dataclasses import (
     StockPosition,
     WatchList,
 )
-from .robinhood_api_logic import Robinhood
+from .async_robinhood_class import AsyncRobinhood
+from .sync_robinhood_class import Robinhood
 
 try:
     __version__ = metadata.version("meow-meow-hood")
@@ -46,6 +47,7 @@ except metadata.PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
+    "AsyncRobinhood",
     "BidAsk",
     "CurrencyPair",
     "FullQuote",

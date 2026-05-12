@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 #  __    __     ______     ______     __     __
 # /\ "-./  \   /\  ___\   /\  __ \   /\ \  _ \ \
 # \ \ \-./\ \  \ \  __\   \ \ \/\ \  \ \ \/ ".\ \
@@ -19,8 +21,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from types import TracebackType
-from typing import Any
+from typing import Any, Coroutine
 
 from dotenv import load_dotenv
 
@@ -35,21 +36,24 @@ from robinhood.browser_functions.token_functions import (
     check_if_modified_date_within_range,
 )
 from robinhood.configure_logger import MISSING, configure_logger
+from robinhood.core._account_impl import AccountImpl
+from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
+from robinhood.core._market_data_impl import MarketDataImpl
+from robinhood.core._option_impl import OptionsImpl
+from robinhood.core._trading_impl import TradingImpl
 from robinhood.db_logic.option_cache import OptionCache
 from robinhood.set_up_script import set_up
-
-from ._http_client import RobinhoodHTTPClient
-from .api import (
-    AccountMixin,
-    MarketDataMixin,
-    OptionsMixin,
-    TradingMixin,
-)
+from robinhood.types import T
 
 logger = logging.getLogger(__name__)
 
 
-class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
+class _CoreRobinhood(
+    MarketDataImpl,
+    AccountImpl,
+    OptionsImpl,
+    TradingImpl,
+):
     def __init__(
         self,
         *,
@@ -65,34 +69,10 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
         access_token: str | None = None,
     ) -> None:
         """
-        Initialize a Robinhood client instance.
-
-        Args:
-            config_path: Base directory where ``.meow-meow-config`` is created
-                or reused. The client stores its ``.env`` token cache and local
-                SQLite database there.
-            extract_token: When ``True``, attempt to acquire a fresh bearer
-                token from the local browser session if the token loaded from
-                ``.env`` is missing or rejected.
-            write_env: When ``True`` writes env file to the config_path
-            open_browser: When ``True``, allow the browser refresh helper to
-                briefly open Robinhood if a stored token is rejected.
-            user_agent: Optional ``User-Agent`` header override for the shared
-                HTTP session.
-            enable_cache: When ``True``, enable the local SQLite instrument
-                cache for option chain and option instrument metadata.
-            prune_expired_options: When ``True``, remove expired option rows
-                when the cache is opened.
-            logging_level: Logging level constant for the library logger,
-                such as ``logging.INFO`` or ``logging.DEBUG``.
-            log_handler: Handler configuration for the library logger.
-                Pass no value to use the library's default handler.
-                ``None`` to clear library handlers and let records propagate,
-                or a ``logging.Handler`` instance to use a custom handler.
-            access_token: Explicit bearer token override. When supplied with
-                ``extract_token=False`` and ``enable_cache=False``, the client
-                skips the config bootstrap path and uses this token directly.
+        Core implementation of the robinhood class for both sync
+        and async classes.
         """
+        self.event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         configure_logger(logging_level, log_handler)
         self.user_id = -1
         if access_token and not extract_token and not enable_cache:
@@ -117,28 +97,13 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
                     open_browser=open_browser,
                     write_env=write_env,
                 )
-            assert token, "Bearer token cannot be none."
-        self._http_client = RobinhoodHTTPClient(token, user_agent)
+            if not token:
+                raise RuntimeError("Bearer token cannot be none.")
+        self._async_http_client = RobinhoodAsyncHTTPClient(token, user_agent)
         logger.info("Robinhood Client Initialized")
 
-    def __enter__(self) -> Robinhood:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        self.close()
-
-    def close(self) -> None:
-        """Closes the robinhood client"""
-        if self._db_cache:
-            self._db_cache.close()
-            self._db_cache = None
-        self._http_client.close()
-        logger.info("Robinhood Client Closed")
+    def _run(self, coro: Coroutine[Any, Any, T]) -> T:
+        return self.event_loop.run_until_complete(coro)
 
     def open_browser(
         self,
@@ -160,7 +125,7 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
         Function that will automatically open browser if token is expired,
         and attempts to retrieve a new token
         """
-        access_token = str(self._http_client.session.headers["Authorization"])
+        access_token = self._async_http_client.access_token
         env_path = self.env_path if self.env_path else ""
         token = _refresh_access_token(
             access_token,
@@ -168,7 +133,7 @@ class Robinhood(MarketDataMixin, OptionsMixin, AccountMixin, TradingMixin):
             True if self.env_path else False,
         )
         if isinstance(token, str):
-            self._http_client.session.headers["Authorization"] = token
+            self._async_http_client.access_token = token
         return None
 
     def execute_custom_sql(

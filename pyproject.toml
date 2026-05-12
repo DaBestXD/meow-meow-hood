@@ -53,9 +53,6 @@ typeCheckingMode = "standard"
 pythonVersion = "3.11"
 venvPath = "."
 venv = ".venv"
-ignore = ["**/__init__.py"]
 
 [dependency-groups]
-dev = [
-    "ruff>=0.15.10",
-]
+dev = ["ruff>=0.15.10"]
