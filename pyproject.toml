@@ -5,6 +5,7 @@ description = "A robinhood api wrapper for option data"
 readme = "README.pypi.md"
 requires-python = ">=3.11"
 dependencies = [
+  "aiohttp>=3.13.5",
   "python-dotenv>=1.2.2",
   "python-snappy>=0.7.3",
   "requests>=2.33.1",
