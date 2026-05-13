@@ -68,9 +68,7 @@ class FakeCache:
         return {option_request: self._ids_by_request[option_request]}
 
 
-def build_async_api_client(
-    *, db_cache: object | None = None
-) -> AsyncRobinhood:
+def build_async_api_client(*, db_cache: object | None = None) -> AsyncRobinhood:
     client = build_async_robinhood_client(
         http_client=SimpleNamespace(
             _get=AsyncMock(),
