@@ -74,7 +74,8 @@ class TestBrowserTokenParser(unittest.TestCase):
                 / "data.sqlite"
             )
             sqlite_path.parent.mkdir(parents=True)
-            with sqlite3.connect(sqlite_path) as con:
+            con = sqlite3.connect(sqlite_path)
+            try:
                 con.execute("CREATE TABLE data (key TEXT, value BLOB)")
                 con.execute(
                     "INSERT INTO data VALUES (?, ?)",
@@ -88,6 +89,8 @@ class TestBrowserTokenParser(unittest.TestCase):
                     ),
                 )
                 con.commit()
+            finally:
+                con.close()
 
             token = _firefox_db_parse(profile_root)
 
