@@ -74,7 +74,8 @@ class TestBrowserTokenParser(unittest.TestCase):
                 / "data.sqlite"
             )
             sqlite_path.parent.mkdir(parents=True)
-            with sqlite3.connect(sqlite_path) as con:
+            con = sqlite3.connect(sqlite_path)
+            try:
                 con.execute("CREATE TABLE data (key TEXT, value BLOB)")
                 con.execute(
                     "INSERT INTO data VALUES (?, ?)",
@@ -88,6 +89,8 @@ class TestBrowserTokenParser(unittest.TestCase):
                     ),
                 )
                 con.commit()
+            finally:
+                con.close()
 
             token = _firefox_db_parse(profile_root)
 
@@ -116,9 +119,7 @@ class TestBrowserTokenParser(unittest.TestCase):
     @patch("robinhood.browser_functions.browser_token_parser._chrome_db_parse")
     @patch("robinhood.browser_functions.browser_token_parser._firefox_db_parse")
     @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
-    @patch(
-        "robinhood.browser_functions.browser_token_parser.auto_open_browser"
-    )
+    @patch("robinhood.browser_functions.browser_token_parser.auto_open_browser")
     def test_get_token_reads_browser_token_without_writing_env(
         self,
         mock_auto_open_browser,
@@ -154,9 +155,7 @@ class TestBrowserTokenParser(unittest.TestCase):
     @patch("robinhood.browser_functions.browser_token_parser._chrome_db_parse")
     @patch("robinhood.browser_functions.browser_token_parser._firefox_db_parse")
     @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
-    @patch(
-        "robinhood.browser_functions.browser_token_parser.auto_open_browser"
-    )
+    @patch("robinhood.browser_functions.browser_token_parser.auto_open_browser")
     def test_get_token_retries_after_403_response(
         self,
         mock_auto_open_browser,

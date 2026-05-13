@@ -237,12 +237,15 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
     def test_error_status_code_handler_logs_critical_on_403(self) -> None:
         client = build_http_client()
 
-        with self.assertLogs(
-            "robinhood.core._http_async_client",
-            level="CRITICAL",
-        ) as logs, self.assertRaisesRegex(
-            RuntimeError,
-            "Access token invalid, relogin into robinhood",
+        with (
+            self.assertLogs(
+                "robinhood.core._http_async_client",
+                level="CRITICAL",
+            ) as logs,
+            self.assertRaisesRegex(
+                RuntimeError,
+                "Access token invalid, relogin into robinhood",
+            ),
         ):
             client._error_status_code_handler("/quotes/", 403)
 

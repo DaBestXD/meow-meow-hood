@@ -15,7 +15,3 @@
 - Add futures buying/selling endpoint
 
 - Add support for robinhood stock screener
-
-- Swap to AIO-HTTP
-
-- Async loop for option Greek batch

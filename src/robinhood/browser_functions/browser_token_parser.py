@@ -100,7 +100,8 @@ def _firefox_db_parse(f: Path) -> str | None:
             continue
         db_file_path = "file:" + str(n / DB_PATH) + "?immutable=1"
         try:
-            with sqlite3.connect(db_file_path, uri=True) as con:
+            con = sqlite3.connect(db_file_path, uri=True)
+            try:
                 cur = con.cursor()
                 cur.execute(
                     "SELECT value FROM data WHERE key = 'web:auth_state'"
@@ -114,6 +115,8 @@ def _firefox_db_parse(f: Path) -> str | None:
                 auth_dict: dict[str, str] = json.loads(blob.decode())
                 access_token = auth_dict.get("access_token")
                 return access_token
+            finally:
+                con.close()
         except sqlite3.OperationalError:
             continue
     return None
