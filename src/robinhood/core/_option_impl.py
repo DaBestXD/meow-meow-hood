@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import defaultdict
 from typing import Any, overload
@@ -159,10 +160,16 @@ class OptionsImpl(TypingBase):
                 seen_ids.add(option_id)
                 all_op_ids.append(option_id)
         op_greek_list: list[OptionGreekData] = []
-        for i in range(0, len(all_op_ids), 200):
-            op_greek_list.extend(
-                await self._get_option_greek_data(all_op_ids[i : i + 200])
-            )
+
+        res = await asyncio.gather(
+            *[
+                self._get_option_greek_data(all_op_ids[i : i + 200])
+                for i in range(0, len(all_op_ids), 200)
+            ]
+        )
+        for c in res:
+            for chain in c:
+                op_greek_list.append(chain)
         greeks_by_id = {o.instrument_id: o for o in op_greek_list}
         return {
             request: [

@@ -200,7 +200,7 @@ class Robinhood(_CoreRobinhood):
         `ratio = (Strike100 * 2) + (Strike50 * 4)`
         `open_option_position(ratio, 'credit', 1, 1.50)`
         """
-        self._run(
+        return self._run(
             self._place_option_order(
                 option_legs,
                 order_type,
@@ -215,6 +215,7 @@ class Robinhood(_CoreRobinhood):
         Set raw_data to `true` if you want the raw dictionary
         back with no processing.
         """
+        return self._run(self._get_account_stock_positions())
 
     def get_account_option_positions(self) -> list[OptionPosition] | None:
         """Returns list of OptionPosition classes"""

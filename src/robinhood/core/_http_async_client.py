@@ -37,6 +37,7 @@ class RobinhoodAsyncHTTPClient:
         if status_code == 403 or status_code == 401:
             # TODO: raise error here
             logger.critical("Access token invalid, relogin into robinhood")
+            raise RuntimeError("Access token invalid, relogin into robinhood")
         else:
             logger.warning("%s returned: %d", endpoint, status_code)
         return None

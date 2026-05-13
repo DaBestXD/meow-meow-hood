@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from functools import cache
 from typing import overload
 
 from robinhood.api_dataclasses import (
@@ -48,6 +47,7 @@ class MarketDataImpl(TypingBase):
         self, symbols: str | list[str]
     ) -> StockInfo | list[StockInfo] | None:
         """Return stock metadata for one symbol or a list of symbols."""
+        _symbols = symbols
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
         res_json = await self._async_http_client._get(
@@ -60,9 +60,9 @@ class MarketDataImpl(TypingBase):
         if self._db_cache:
             for s in stock_info_list:
                 self._db_cache.insert_stock_info(s)
-        return (
-            stock_info_list if len(stock_info_list) > 1 else stock_info_list[0]
-        )
+        if isinstance(_symbols, str):
+            return stock_info_list[0]
+        return stock_info_list
 
     @overload
     async def _get_index_info(self, symbols: str) -> IndexInfo | None: ...
@@ -221,8 +221,8 @@ class MarketDataImpl(TypingBase):
             quotes.append(FuturesQuote.from_json(n[DATA]))
         if not quotes:
             return None
+        return quotes if len(quotes) > 1 else quotes[0]
 
-    @cache
     async def _get_all_futures_products(
         self,
     ) -> list[FuturesProduct] | None:
