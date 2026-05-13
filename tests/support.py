@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 from robinhood.api_dataclasses import OptionGreekData, OptionInstrument
 
 if TYPE_CHECKING:
-    from robinhood._http_client import RobinhoodHTTPClient
-    from robinhood.robinhood_api_logic import Robinhood
+    from robinhood.async_robinhood_class import AsyncRobinhood
+    from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
+    from robinhood.sync_robinhood_class import Robinhood
 
 
 def build_option_instrument(
@@ -397,19 +399,40 @@ def build_robinhood_client(
     http_client: object | None = None,
     db_cache: object | None = None,
 ) -> Robinhood:
-    from robinhood.robinhood_api_logic import Robinhood
+    from robinhood.sync_robinhood_class import Robinhood
 
     client = Robinhood.__new__(Robinhood)
-    client._http_client = http_client if http_client is not None else Mock()
+    client._async_http_client = (
+        http_client if http_client is not None else Mock()
+    )
     client._db_cache = db_cache
-    client.logger = None
+    client.event_loop = asyncio.new_event_loop()
     return client
 
 
-def build_http_client(*, session: object | None = None) -> RobinhoodHTTPClient:
-    from robinhood._http_client import RobinhoodHTTPClient
+def build_async_robinhood_client(
+    *,
+    http_client: object | None = None,
+    db_cache: object | None = None,
+) -> AsyncRobinhood:
+    from robinhood.async_robinhood_class import AsyncRobinhood
 
-    client = RobinhoodHTTPClient.__new__(RobinhoodHTTPClient)
+    client = AsyncRobinhood.__new__(AsyncRobinhood)
+    client._async_http_client = (
+        http_client if http_client is not None else Mock()
+    )
+    client._db_cache = db_cache
+    client.event_loop = asyncio.new_event_loop()
+    return client
+
+
+def build_http_client(
+    *, session: object | None = None
+) -> RobinhoodAsyncHTTPClient:
+    from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
+
+    client = RobinhoodAsyncHTTPClient.__new__(RobinhoodAsyncHTTPClient)
     client.session = session if session is not None else Mock()
-    client.logger = None
+    client.access_token = "bearer-token"
+    client.user_agent = None
     return client
