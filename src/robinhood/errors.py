@@ -1,6 +1,9 @@
 class RobinhoodError(Exception): ...
 
 
+class OrderFailedError(RobinhoodError): ...
+
+
 class InstruemtNotFoundError(RobinhoodError): ...
 
 

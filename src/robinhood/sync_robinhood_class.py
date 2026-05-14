@@ -174,42 +174,6 @@ class Robinhood(_CoreRobinhood):
         """Return option greek data grouped by the input request objects."""
         return self._run(self._get_option_greeks_batch_request(option_requests))
 
-    def place_stock_order(
-        self,
-        symbol: str,
-        side: Literal["buy", "sell"],
-        order_type: Literal["market", "limit"],
-        market_hours: Literal[
-            "regular_hours", "extended_hours"
-        ] = "regular_hours",
-        time_in_force: Literal["gfd", "gtc"] = "gfd",
-    ):
-        """Not done yet"""
-        raise NotImplementedError
-
-    def place_option_order(
-        self,
-        option_legs: list[OptionRequest],
-        order_type: Literal["debit", "credit"],
-        quantity: int,
-        limit_price: float,
-    ) -> OptionOrderResponse | None:
-        """
-        This can be used to open/close positions
-        Supports multi leg strategies and different leg ratios
-        Example of ratio:
-        `ratio = (Strike100 * 2) + (Strike50 * 4)`
-        `open_option_position(ratio, 'credit', 1, 1.50)`
-        """
-        return self._run(
-            self._place_option_order(
-                option_legs,
-                order_type,
-                quantity,
-                limit_price,
-            )
-        )
-
     def get_account_stock_positions(self) -> list[StockPosition] | None:
         """
         Returns list of StockPosition classes
@@ -285,5 +249,28 @@ class Robinhood(_CoreRobinhood):
                 dollar_based_amount,
                 quantity,
                 currency_code,
+            )
+        )
+
+    def place_option_order(
+        self,
+        option_legs: list[OptionRequest],
+        order_type: Literal["debit", "credit"],
+        quantity: int,
+        limit_price: float,
+    ) -> OptionOrderResponse | None:
+        """
+        This can be used to open/close positions
+        Supports multi leg strategies and different leg ratios
+        Example of ratio:
+        `ratio = (Strike100 * 2) + (Strike50 * 4)`
+        `open_option_position(ratio, 'credit', 1, 1.50)`
+        """
+        return self._run(
+            self._place_option_order(
+                option_legs,
+                order_type,
+                quantity,
+                limit_price,
             )
         )

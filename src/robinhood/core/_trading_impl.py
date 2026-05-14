@@ -192,18 +192,26 @@ class TradingImpl(TypingBase):
             quantity,
             currency_code,
         )
-        if isinstance(order, StockOrderStockAmount):
-            res_json = await self._async_http_client._post(
-                endpoint=API_STOCK_ORDER,
-                json=order.__dict__,
-            )
-            return StockOrderResponse.from_json(res_json) if res_json else None
-        if isinstance(order, StockOrderDollarAmount):
-            res_json = await self._async_http_client._post(
-                endpoint=API_STOCK_ORDER,
-                json=order.__dict__,
-            )
-            return StockOrderResponse.from_json(res_json) if res_json else None
+        try:
+            if isinstance(order, StockOrderStockAmount):
+                res_json = await self._async_http_client._post(
+                    endpoint=API_STOCK_ORDER,
+                    json=order.__dict__,
+                )
+                return (
+                    StockOrderResponse.from_json(res_json) if res_json else None
+                )
+            if isinstance(order, StockOrderDollarAmount):
+                res_json = await self._async_http_client._post(
+                    endpoint=API_STOCK_ORDER,
+                    json=order.__dict__,
+                )
+                return (
+                    StockOrderResponse.from_json(res_json) if res_json else None
+                )
+        # TODO: change this to better error handling
+        except Exception:
+            raise MalformedOrderError
 
     async def _place_option_order(
         self,

@@ -1,5 +1,4 @@
 import logging
-from functools import cache
 from types import TracebackType
 from typing import Literal, Self, overload
 
@@ -19,6 +18,7 @@ from robinhood.api_dataclasses import (
     OrderBook,
     StockInfo,
     StockOrder,
+    StockOrderResponse,
     StockPosition,
     WatchList,
 )
@@ -121,7 +121,6 @@ class AsyncRobinhood(_CoreRobinhood):
         """
         return await self._get_future_quote(ids)
 
-    @cache
     async def get_all_futures_products(self) -> list[FuturesProduct] | None:
         return await self._get_all_futures_products()
 
@@ -179,18 +178,51 @@ class AsyncRobinhood(_CoreRobinhood):
         """Return option greek data grouped by the input request objects."""
         return await self._get_option_greeks_batch_request(option_requests)
 
-    async def place_stock_order(
+    async def place_limit_stock_order(
         self,
         symbol: str,
         side: Literal["buy", "sell"],
-        order_type: Literal["market", "limit"],
+        price: float,
+        quantity: float,
         market_hours: Literal[
             "regular_hours", "extended_hours"
         ] = "regular_hours",
-        time_in_force: Literal["gfd", "gtc"] = "gfd",
-    ):
-        """Not done yet"""
-        raise NotImplementedError
+        time_in_force: Literal["gfd", "gtc"] = "gtc",
+        dollar_based_amount: float | None = None,
+        currency_code: str = "USD",
+    ) -> StockOrderResponse | None:
+        return await self._place_limit_stock_order(
+            symbol,
+            side,
+            price,
+            quantity,
+            market_hours,
+            time_in_force,
+            dollar_based_amount,
+            currency_code,
+        )
+
+    async def place_market_stock_order(
+        self,
+        symbol: str,
+        side: Literal["buy", "sell"],
+        market_hours: Literal[
+            "regular_hours", "extended_hours"
+        ] = "regular_hours",
+        time_in_force: Literal["gfd", "gtc"] = "gtc",
+        dollar_based_amount: float | None = None,
+        quantity: float | None = None,
+        currency_code: str = "USD",
+    ) -> StockOrderResponse | None:
+        return await self._place_market_stock_order(
+            symbol,
+            side,
+            market_hours,
+            time_in_force,
+            dollar_based_amount,
+            quantity,
+            currency_code,
+        )
 
     async def place_option_order(
         self,
