@@ -5,12 +5,14 @@ from robinhood.api_dataclasses import (
     FullQuote,
     IndexInfo,
     IndexQuote,
+    MoneyAmount,
     OptionGreekData,
     OptionOrderHistory,
     OptionPosition,
     OrderBook,
     StockInfo,
     StockOrder,
+    StockOrderResponse,
     StockPosition,
 )
 from tests.support import (
@@ -21,6 +23,7 @@ from tests.support import (
     build_option_position_payload,
     build_orderbook_payload,
     build_stock_order_payload,
+    build_stock_order_response_payload,
 )
 
 
@@ -154,6 +157,27 @@ class TestApiDataclasses(unittest.TestCase):
         self.assertEqual("buy", order.legs[0].side)
         self.assertEqual(500.0, order.legs[0].strike_price)
         self.assertEqual(1, order.legs[0].ratio_quantity)
+
+    def test_stock_order_response_from_json_builds_nested_amounts(self):
+        order = StockOrderResponse.from_json(
+            build_stock_order_response_payload()
+        )
+
+        self.assertEqual(
+            "6a05547e-6b7d-4a8b-8275-f925ab3b4e6c",
+            order.id,
+        )
+        self.assertEqual(1.0, order.quantity)
+        self.assertEqual(0.0, order.cumulative_quantity)
+        self.assertEqual(1.35, order.price)
+        self.assertIsNone(order.average_price)
+        self.assertIsInstance(order.total_notional, MoneyAmount)
+        self.assertEqual(1.35, order.total_notional.amount)
+        self.assertEqual("USD", order.total_notional.currency_code)
+        self.assertEqual(
+            "https://api.robinhood.com/orders/6a05547e-6b7d-4a8b-8275-f925ab3b4e6c/cancel/",
+            order.cancel_url,
+        )
 
     def test_orderbook_from_json_builds_bid_and_ask_levels(self):
         orderbook = OrderBook.from_json(build_orderbook_payload())

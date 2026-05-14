@@ -2,8 +2,6 @@
 
 ## Priority TODO
 
-- Add buying and selling positions for stocks(Options done, multi leg support included!)
-
 - Add ability to store equity information into db for long term storage
 
 - Add function to export data to a csv file or json

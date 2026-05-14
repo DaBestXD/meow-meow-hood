@@ -9,6 +9,7 @@ import robinhood
 class TestPackageInit(unittest.TestCase):
     def test_package_exports_public_client_types(self):
         expected_exports = {
+            "AsyncRobinhood",
             "BidAsk",
             "CurrencyPair",
             "FullQuote",
@@ -26,8 +27,10 @@ class TestPackageInit(unittest.TestCase):
             "OptionStrategy",
             "OrderBook",
             "Robinhood",
+            "MoneyAmount",
             "StockInfo",
             "StockOrder",
+            "StockOrderResponse",
             "StockPosition",
             "WatchList",
             "__version__",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
@@ -10,6 +12,12 @@ if TYPE_CHECKING:
     from robinhood.async_robinhood_class import AsyncRobinhood
     from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
     from robinhood.sync_robinhood_class import Robinhood
+
+
+def build_test_jwt(*, exp: int) -> str:
+    payload = json.dumps({"exp": exp}, separators=(",", ":")).encode()
+    payload_b64 = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+    return f"header.{payload_b64}.signature"
 
 
 def build_option_instrument(
@@ -285,6 +293,50 @@ def build_stock_order_payload(
     }
 
 
+def build_stock_order_response_payload() -> dict[str, object]:
+    return {
+        "id": "6a05547e-6b7d-4a8b-8275-f925ab3b4e6c",
+        "ref_id": "d59d24bb-cc0e-48bd-8bcf-08ac6d9a8ce1",
+        "account": "https://api.robinhood.com/accounts/447853730/",
+        "position": "https://api.robinhood.com/positions/447853730/2690d965-cbac-4865-ad7c-34881b10f81e/",
+        "instrument": "https://api.robinhood.com/instruments/2690d965-cbac-4865-ad7c-34881b10f81e/",
+        "cancel": "https://api.robinhood.com/orders/6a05547e-6b7d-4a8b-8275-f925ab3b4e6c/cancel/",
+        "state": "queued",
+        "side": "buy",
+        "type": "market",
+        "trigger": "immediate",
+        "time_in_force": "gfd",
+        "position_effect": "open",
+        "quantity": "1.00000000",
+        "cumulative_quantity": "0.00000000",
+        "price": "1.35000000",
+        "average_price": None,
+        "fees": "0",
+        "sec_fees": "0.00",
+        "taf_fees": "0.00",
+        "cat_fees": "0.00",
+        "dollar_based_amount": None,
+        "requested_notional_amount": None,
+        "total_notional": {
+            "amount": "1.35",
+            "currency_code": "USD",
+            "currency_id": "1072fc76-1862-41ab-82c2-485837590762",
+        },
+        "executed_notional": None,
+        "market_hours": "regular_hours",
+        "extended_hours": False,
+        "override_dtbp_checks": False,
+        "override_day_trade_checks": False,
+        "order_form_version": 7,
+        "instrument_id": "2690d965-cbac-4865-ad7c-34881b10f81e",
+        "created_at": "2026-05-14T04:50:06.641171Z",
+        "updated_at": "2026-05-14T04:50:06.641171Z",
+        "last_transaction_at": "2026-05-14T04:50:06.641171Z",
+        "reject_reason": None,
+        "url": "https://api.robinhood.com/orders/6a05547e-6b7d-4a8b-8275-f925ab3b4e6c/",
+    }
+
+
 def build_option_order_payload(
     *,
     id: str = "option-order-id",
@@ -312,6 +364,25 @@ def build_option_order_payload(
     }
 
 
+def build_option_order_response_payload(
+    *,
+    id: str = "option-order-response-id",
+    chain_symbol: str = "SPY",
+    direction: str = "debit",
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "chain_symbol": chain_symbol,
+        "cancel_url": (
+            f"https://api.robinhood.com/options/orders/{id}/cancel/"
+        ),
+        "direction": direction,
+        "premium": "1.25",
+        "estimated_total_new_amount": "125.0",
+        "strategy": "long_call",
+    }
+
+
 def build_orderbook_payload() -> dict[str, object]:
     return {
         "asks": [
@@ -328,6 +399,50 @@ def build_orderbook_payload() -> dict[str, object]:
                 "quantity": "8",
             }
         ],
+    }
+
+
+def build_futures_product_payload(
+    *,
+    id: str = "future-product-id",
+    symbol: str = "ES",
+    display_symbol: str = "/ES",
+    active_contract_id: str = "future-contract-id",
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "symbol": symbol,
+        "displaySymbol": display_symbol,
+        "description": "E-mini S&P 500",
+        "priceIncrements": "0.25",
+        "activeFuturesContractId": active_contract_id,
+        "simpleName": "E-mini S&P 500",
+        "settlementStartTime": "2026-04-01T21:00:00Z",
+    }
+
+
+def build_futures_contract_payload(
+    *,
+    id: str = "future-contract-id",
+    product_id: str = "future-product-id",
+    display_symbol: str = "/ESM26",
+    expiration_mmy: str = "202606",
+) -> dict[str, object]:
+    return {
+        "id": id,
+        "productId": product_id,
+        "symbol": display_symbol.replace("/", ""),
+        "displaySymbol": display_symbol,
+        "description": "E-mini S&P 500 Jun 2026",
+        "multiplier": "50.0",
+        "expirationMmy": expiration_mmy,
+        "expiration": "2026-06-19",
+        "customerLastCloseDate": "2026-06-18",
+        "tradability": "tradable",
+        "state": "active",
+        "settlementStartTime": "2026-06-19T21:00:00Z",
+        "firstTradeDate": "2026-03-20",
+        "settlementDate": "2026-06-19",
     }
 
 

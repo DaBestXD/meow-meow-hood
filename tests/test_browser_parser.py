@@ -1,4 +1,3 @@
-import base64
 import json
 import sqlite3
 import tempfile
@@ -19,19 +18,14 @@ from robinhood.browser_functions.browser_token_parser import (
     get_acc_id,
     get_token,
 )
-
-
-def _build_test_jwt(*, exp: int) -> str:
-    payload = json.dumps({"exp": exp}, separators=(",", ":")).encode()
-    payload_b64 = base64.urlsafe_b64encode(payload).decode().rstrip("=")
-    return f"header.{payload_b64}.signature"
+from tests.support import build_test_jwt
 
 
 class TestBrowserTokenParser(unittest.TestCase):
     def test_chrome_db_parse_extracts_valid_access_token_from_log(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             log_file = Path(temp_dir) / "000001.log"
-            valid_token = _build_test_jwt(exp=int(time.time()) + 3600)
+            valid_token = build_test_jwt(exp=int(time.time()) + 3600)
             log_file.write_text(
                 '[\\"access_token\\",\\"' + valid_token + '\\"]'
             )
@@ -43,8 +37,8 @@ class TestBrowserTokenParser(unittest.TestCase):
     def test_chrome_db_parse_skips_malformed_and_expired_tokens(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             log_file = Path(temp_dir) / "000001.log"
-            expired_token = _build_test_jwt(exp=int(time.time()) - 60)
-            valid_token = _build_test_jwt(exp=int(time.time()) + 3600)
+            expired_token = build_test_jwt(exp=int(time.time()) - 60)
+            valid_token = build_test_jwt(exp=int(time.time()) + 3600)
             log_file.write_text(
                 '[\\"access_token\\",\\"not-a-jwt\\"]'
                 '[\\"access_token\\",\\"' + expired_token + '\\"]'

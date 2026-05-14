@@ -9,13 +9,13 @@ from robinhood.api_dataclasses import (
     Future,
     IndexQuote,
     OptionChain,
-    OptionOrderHistory,
     OptionPosition,
     OptionRequest,
     StockInfo,
     StockPosition,
 )
 from robinhood.async_robinhood_class import AsyncRobinhood
+from robinhood.browser_functions.browser_token_parser import Chrome
 from robinhood.constants import (
     API_FUTURES_QUOTES,
     API_INDEX_QUOTE,
@@ -38,7 +38,6 @@ from tests.support import (
     build_full_quote_payload,
     build_index_quote_payload,
     build_option_chain_payload,
-    build_option_order_payload,
     build_option_position_payload,
     build_robinhood_client,
     build_stock_info_payload,
@@ -389,23 +388,20 @@ class TestSyncRobinhoodAPI(unittest.TestCase):
         self.assertEqual(expected, result)
         client._get_account_stock_positions.assert_awaited_once_with()
 
-    def test_place_option_order_returns_private_result(self) -> None:
+    @patch("robinhood.core._core_robinhood.auto_open_browser")
+    @patch("robinhood.core._core_robinhood.check_if_modified_date_within_range")
+    def test_open_browser_refreshes_when_browser_auth_is_recent(
+        self,
+        mock_check_if_modified_date_within_range: Mock,
+        mock_auto_open_browser: Mock,
+    ) -> None:
         client = self.make_client()
-        option_legs = [OptionRequest(symbol="SPY", exp_date="2026-04-17")]
-        expected = OptionOrderHistory.from_json(build_option_order_payload())
-        client._place_option_order = AsyncMock(return_value=expected)
+        mock_check_if_modified_date_within_range.return_value = False
 
-        result = client.place_option_order(
-            option_legs=option_legs,
-            order_type="debit",
-            quantity=1,
-            limit_price=1.5,
-        )
+        client.open_browser(Chrome(), wait_time=3, days=7)
 
-        self.assertEqual(expected, result)
-        client._place_option_order.assert_awaited_once_with(
-            option_legs,
-            "debit",
-            1,
-            1.5,
+        mock_check_if_modified_date_within_range.assert_called_once_with(days=7)
+        mock_auto_open_browser.assert_called_once_with(
+            unittest.mock.ANY,
+            wait_time=3,
         )
