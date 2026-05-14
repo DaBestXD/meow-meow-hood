@@ -106,7 +106,11 @@ class AccountImpl(TypingBase):
         for s in res_json:
             items = await self._watchlist_helper(s["id"])
             watchlists.append(
-                WatchList(name=s["display_name"], id=s["id"], items=items)
+                WatchList(
+                    name=s["display_name"],
+                    id=s["id"],
+                    items=items,
+                )
             )
         if not watchlists:
             logger.warning("No watchlists were found.")

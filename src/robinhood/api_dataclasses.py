@@ -289,6 +289,107 @@ class StockOrder(ApiPayloadMixin):
 
 
 @dataclass(frozen=True, slots=True)
+class MoneyAmount(ApiPayloadMixin):
+    amount: float
+    currency_code: str
+    currency_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StockOrderResponse(ApiPayloadMixin):
+    id: str
+    ref_id: str
+    account: str
+    position: str
+    instrument: str
+    cancel_url: str
+    state: str
+    side: str
+    type: str
+    trigger: str
+    time_in_force: str
+    position_effect: str
+    quantity: float
+    cumulative_quantity: float
+    price: float
+    average_price: float | None
+    fees: float
+    sec_fees: float
+    taf_fees: float
+    cat_fees: float
+    dollar_based_amount: MoneyAmount | None
+    requested_notional_amount: MoneyAmount | None
+    total_notional: MoneyAmount | None
+    executed_notional: MoneyAmount | None
+    market_hours: str
+    extended_hours: bool
+    override_dtbp_checks: bool
+    override_day_trade_checks: bool
+    order_form_version: int
+    instrument_id: str
+    created_at: str
+    updated_at: str
+    last_transaction_at: str
+    reject_reason: str | None
+    url: str
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Self:
+        normalized_payload = dict(payload)
+        normalized_payload["cancel_url"] = payload["cancel"]
+        data = cls._filter_dict(normalized_payload, *cls._test())
+        data["average_price"] = (
+            float(payload["average_price"])
+            if payload.get("average_price") is not None
+            else None
+        )
+        for key in (
+            "dollar_based_amount",
+            "requested_notional_amount",
+            "total_notional",
+            "executed_notional",
+        ):
+            value = payload.get(key)
+            data[key] = MoneyAmount.from_json(value) if value else None
+        return cls(**data)
+
+
+@dataclass
+class StockOrderPost:
+    account: str
+    instrument: str
+    market_hours: str
+    ref_id: str
+    side: Literal["buy", "sell"]
+    time_in_force: Literal["gfd", "gtc"]
+    type: Literal["market", "limit"]
+    trigger: Literal["immediate"]
+    position_effect: Literal["open", "close"]
+    symbol: str
+    order_form_version: int
+    ask_price: str
+    bid_price: str
+    bid_ask_timestamp: str
+
+
+@dataclass
+class StockOrderStockAmount(StockOrderPost):
+    quantity: str
+
+
+@dataclass
+class StockOrderDollarAmount(StockOrderPost):
+    dollar_based_amount: dict[str, str]
+
+
+@dataclass
+class StockOrderLimit(StockOrderPost):
+    type: Literal["market", "limit"]
+    price: str
+    quantity: str
+
+
+@dataclass(frozen=True, slots=True)
 class OptionOrderLeg(ApiPayloadMixin):
     side: str
     expiration_date: str

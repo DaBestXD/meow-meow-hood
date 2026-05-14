@@ -9,75 +9,201 @@ from robinhood.api_dataclasses import (
     OptionOrder,
     OptionOrderResponse,
     OptionRequest,
+    StockOrderDollarAmount,
+    StockOrderLimit,
+    StockOrderResponse,
+    StockOrderStockAmount,
     _OptionLeg,
 )
 from robinhood.constants import (
     API_OPTION_ORDER,
+    API_STOCK_ORDER,
     BASE_API_LINK,
 )
 from robinhood.core._typing_base import TypingBase
+from robinhood.errors import (
+    AccountIdNotFoundError,
+    InstruemtNotFoundError,
+    MalformedOrderError,
+)
 from robinhood.option_matching import map_option_requests_to_ois
 
 logger = logging.getLogger(__name__)
 
 
-# @dataclass
-# class StockOrder:
-#     account: str
-#     instrument: str
-#     market_hours: str
-#     position_effect: str
-#     ref_id: str
-#     side: Literal["buy", "sell"]
-#     time_in_force: Literal["gfd", "gtc"]
-#     type: Literal["market", "limit"]
-#     trigger: Literal["immediate"] = "immediate"
-#     order_form_version: int = 7
-#
-#     data = {
-#         "account": "https://api.robinhood.com/accounts/{id}/",
-#         "instrument": "https://api.robinhood.com/instruments/8f92e76f-1e0e-4478-8580-16a6ffcfaef5/",
-#         "market_hours": "regular_hours",
-#         "order_form_version": 7,
-#         "position_effect": "open",
-#         "ref_id": str(uuid4()),
-#         "side": "buy",
-#         "symbol": "SPY",
-#         "time_in_force": "gfd",
-#         "trigger": "immediate",
-#         "type": "market",
-#         "dollar_based_amount": {"amount": "1.00", "currency_code": "USD"},
-#     }
-
-
 class TradingImpl(TypingBase):
-    async def _place_limit_stock_order(self): ...
-    async def _place_market_stock_order(self): ...
-    async def _place_stock_order(
+    async def _stock_order_factory(
         self,
         symbol: str,
         side: Literal["buy", "sell"],
-        order_type: Literal["market", "limit"],
+        s_type: Literal["market", "limit"],
+        time_in_force: Literal["gfd", "gtc"],
         market_hours: Literal[
             "regular_hours", "extended_hours"
         ] = "regular_hours",
-        time_in_force: Literal["gfd", "gtc"] = "gfd",
+        dollar_based_amount: float | None = None,
+        quantity: float | None = None,
+        currency_code: str = "USD",
+        price: float = -1,
+    ) -> StockOrderLimit | StockOrderStockAmount | StockOrderDollarAmount:
+        self._malform_order_check(
+            side, dollar_based_amount, quantity, s_type, price
+        )
+        res = await self._get_stock_info(symbol)
+        if not res:
+            raise InstruemtNotFoundError(f"{symbol} was not found")
+        quote = await self._get_stock_quotes(symbol)
+        if not quote:
+            raise ValueError(f"unable to retrieve quote for {symbol}")
+        _stock_dict = {
+            "account": BASE_API_LINK + f"/accounts/{self.user_id}/",
+            "instrument": res.url,
+            "ref_id": str(uuid4()),
+            "market_hours": market_hours,
+            "symbol": symbol,
+            "side": side,
+            "type": s_type,
+            "time_in_force": time_in_force,
+            "order_form_version": 7,
+            "ask_price": str(quote.ask_price),
+            "bid_price": str(quote.bid_price),
+            "bid_ask_timestamp": quote.updated_at,
+            "position_effect": "open" if side == "buy" else "close",
+            "trigger": "immediate",
+        }
+        if s_type == "limit":
+            return StockOrderLimit(
+                **_stock_dict,
+                price=str(price),
+                quantity=str(quantity),
+            )
+        if s_type == "market":
+            if dollar_based_amount:
+                return StockOrderDollarAmount(
+                    **_stock_dict,
+                    dollar_based_amount={
+                        "amount": f"{dollar_based_amount:.2f}",
+                        "currency_code": currency_code,
+                    },
+                )
+            if quantity:
+                return StockOrderStockAmount(
+                    **_stock_dict,
+                    quantity=str(quantity),
+                )
+        raise MalformedOrderError
+
+    def _malform_order_check(
+        self,
+        side: str,
+        dollar_based_amount: float | None,
+        quantity: float | None,
+        s_type: Literal["market", "limit"],
+        price: float,
+    ) -> None:
+        if s_type == "limit" and price <= 0:
+            raise MalformedOrderError("price must be greater than 0")
+        if side != "buy" and side != "sell":
+            raise MalformedOrderError(
+                f"must be literal 'side' or 'buy': {side} was used instead"
+            )
+        if not dollar_based_amount and not quantity:
+            raise MalformedOrderError(
+                "must provide either a dollar amount of stock based amount"
+            )
+        if dollar_based_amount and quantity:
+            raise MalformedOrderError("only one amount value accepted")
+        if isinstance(self.user_id, int):
+            raise AccountIdNotFoundError(
+                "no valid account id was found at startup"
+            )
+        return None
+
+    async def _place_limit_stock_order(
+        self,
+        symbol: str,
+        side: Literal["buy", "sell"],
+        price: float,
+        quantity: float,
+        market_hours: Literal[
+            "regular_hours", "extended_hours"
+        ] = "regular_hours",
+        time_in_force: Literal["gfd", "gtc"] = "gtc",
+        dollar_based_amount: float | None = None,
+        currency_code: str = "USD",
     ):
-        """No worky yet"""
-        raise NotImplementedError
-        stock_info = await self.get_stock_info_async(symbol)
-        if not stock_info:
-            return None
-        # TODO: find differences in limit vs market order for stock purchasing
-        #
-        # StockOrder(
-        #     account=BASE_API_LINK + f"accounts/{self.user_id}",
-        #     instrument=stock_info.url,
-        #     market_hours=market_hours,
-        #     time_in_force=time_in_force,
-        #     ref_id=str(uuid4()),
-        #     side=side,
-        # )
+        self._malform_order_check(
+            side,
+            dollar_based_amount,
+            quantity,
+            "limit",
+            price,
+        )
+        order = await self._stock_order_factory(
+            symbol,
+            side,
+            "limit",
+            time_in_force,
+            market_hours,
+            dollar_based_amount,
+            quantity,
+            currency_code,
+            price,
+        )
+        res_json = await self._async_http_client._post(
+            endpoint=API_STOCK_ORDER,
+            json=order.__dict__,
+        )
+        return StockOrderResponse.from_json(res_json) if res_json else None
+
+    async def _place_market_stock_order(
+        self,
+        symbol: str,
+        side: Literal["buy", "sell"],
+        market_hours: Literal[
+            "regular_hours", "extended_hours"
+        ] = "regular_hours",
+        time_in_force: Literal["gfd", "gtc"] = "gtc",
+        dollar_based_amount: float | None = None,
+        quantity: float | None = None,
+        currency_code: str = "USD",
+    ) -> StockOrderResponse | None:
+        """
+        Defaults to regular_hours use extended_hours when needed.
+        Defaults to 'gtc' swap to 'gfd' when needed.
+        Use either a dollar based amount or stock based amount
+        If you use a stock_based_amount defaults to use the stock's
+        ask price, use limit order for greater price control.
+        """
+        self._malform_order_check(
+            side,
+            dollar_based_amount,
+            quantity,
+            "market",
+            -1,
+        )
+        order = await self._stock_order_factory(
+            symbol,
+            side,
+            "market",
+            time_in_force,
+            market_hours,
+            dollar_based_amount,
+            quantity,
+            currency_code,
+        )
+        if isinstance(order, StockOrderStockAmount):
+            res_json = await self._async_http_client._post(
+                endpoint=API_STOCK_ORDER,
+                json=order.__dict__,
+            )
+            return StockOrderResponse.from_json(res_json) if res_json else None
+        if isinstance(order, StockOrderDollarAmount):
+            res_json = await self._async_http_client._post(
+                endpoint=API_STOCK_ORDER,
+                json=order.__dict__,
+            )
+            return StockOrderResponse.from_json(res_json) if res_json else None
 
     async def _place_option_order(
         self,
@@ -97,10 +223,10 @@ class TradingImpl(TypingBase):
         # oh... chain_id not symbol
         chain_symbol_pair = {o.symbol: o.symbol for o in option_legs}
         if len(chain_symbol_pair) > 1:
-            raise ValueError("Order should only be for one symbol")
+            raise MalformedOrderError("Order should only be for one symbol")
         chain = await self._get_option_chain_data(*chain_symbol_pair)
         if not chain:
-            raise ValueError(
+            raise InstruemtNotFoundError(
                 f"Unable to find chain id for {[*chain_symbol_pair][0]}"
             )
         # 😹 wtf is this piece of shit
@@ -116,7 +242,7 @@ class TradingImpl(TypingBase):
         for leg, oi in n.items():
             oi = oi[0]
             if not leg.position_effect or not leg.side:
-                raise ValueError("position_effect/side cannot be None")
+                raise MalformedOrderError("position_effect/side cannot be None")
             legs.append(
                 {
                     "option": oi.url,

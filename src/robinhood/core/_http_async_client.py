@@ -29,11 +29,11 @@ class RobinhoodAsyncHTTPClient:
         """
         if status_code >= 500:
             # TODO: add retry logic for 5XX errors
-            raise NotImplementedError
+            raise NotImplementedError(f"{endpoint}, {status_code}")
         if status_code == 429:
             logger.warning("429 error returned, you are being rate limited.")
             # TODO: change this to a hardblock maybe sleep for a minute?
-            raise NotImplementedError
+            raise NotImplementedError(f"{endpoint}, {status_code}")
         if status_code == 403 or status_code == 401:
             # TODO: raise error here
             logger.critical("Access token invalid, relogin into robinhood")
@@ -106,12 +106,13 @@ class RobinhoodAsyncHTTPClient:
                 data=data,
                 json=json,
             ) as res:
-                res.raise_for_status()
                 logger.debug(
-                    "POST request: %s, data length: %d",
+                    "POST request: %s, data: %s json: %s",
                     endpoint,
-                    len(data) if data else 0,
+                    data if data else "none",
+                    json if json else "none",
                 )
+                res.raise_for_status()
                 return await res.json()
         except aiohttp.ClientResponseError as e:
             self._error_status_code_handler(endpoint, e.status)
