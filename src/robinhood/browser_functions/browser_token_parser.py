@@ -1,3 +1,5 @@
+"""Helpers for extracting Robinhood tokens from local browser profiles."""
+
 from __future__ import annotations
 
 import base64
@@ -40,6 +42,8 @@ DB_PATH = Path("storage/default/https+++robinhood.com/ls/data.sqlite")
 
 @dataclass(frozen=True)
 class Browser:
+    """Executable names for a supported browser on each platform."""
+
     linux: str
     mac: str
     windows: str
@@ -47,6 +51,8 @@ class Browser:
 
 @dataclass(frozen=True)
 class Chrome(Browser):
+    """Google Chrome executable names for supported platforms."""
+
     linux: str = "google-chrome"
     mac: str = "Google Chrome"
     windows: str = "chrome.exe"
@@ -54,6 +60,8 @@ class Chrome(Browser):
 
 @dataclass(frozen=True)
 class Firefox(Browser):
+    """Firefox executable names for supported platforms."""
+
     linux: str = "firefox"
     mac: str = "firefox"
     windows: str = "firefox.exe"
@@ -157,9 +165,11 @@ def _chrome_db_parse(f: Path) -> str | None:
 
 # Add retry for 5XX errors
 def get_acc_id(bearer_token: str) -> str | int:
+    """Return the account number for a bearer token or the HTTP status code."""
     headers = {"authorization": f"Bearer {bearer_token}"}
     r = requests.get(API_ACCOUNT, headers=headers)
     if r.status_code == 200:
+        # returns the list account back
         return r.json()[RESULTS][0][ACCOUNT_NUMBER]
     else:
         return r.status_code

@@ -1,3 +1,5 @@
+"""Synchronous public Robinhood client."""
+
 import logging
 from functools import cache
 from types import TracebackType
@@ -29,6 +31,14 @@ logger = logging.getLogger(__name__)
 
 
 class Robinhood(_CoreRobinhood):
+    """
+    Synchronous Robinhood API client.
+    Use this client when calling methods from regular synchronous Python code.
+    It manages an internal event loop around the shared async implementation.
+    Recommended to use the context manger to avoid resouce leaks.
+    Remember to call `close()` if no context manger is used
+    """
+
     def __enter__(self) -> Self:
         return self
 
@@ -57,6 +67,7 @@ class Robinhood(_CoreRobinhood):
     def get_stock_info(
         self, symbols: str | list[str]
     ) -> StockInfo | list[StockInfo] | None:
+        """Return stock metadata for one symbol or a list of symbols."""
         return self._run(self._get_stock_info(symbols))
 
     @overload
@@ -67,6 +78,7 @@ class Robinhood(_CoreRobinhood):
     def get_index_info(
         self, symbols: str | list[str]
     ) -> IndexInfo | list[IndexInfo] | None:
+        """Return index metadata for one symbol or a list of symbols."""
         return self._run(self._get_index_info(symbols))
 
     @overload
@@ -79,6 +91,7 @@ class Robinhood(_CoreRobinhood):
     def get_index_quotes(
         self, symbols: str | list[str]
     ) -> IndexQuote | list[IndexQuote] | None:
+        """Return index quotes for one symbol or a list of symbols."""
         return self._run(self._get_index_quotes(symbols))
 
     @overload
@@ -89,12 +102,20 @@ class Robinhood(_CoreRobinhood):
     def get_stock_quotes(
         self, symbol: str | list[str]
     ) -> FullQuote | list[FullQuote] | None:
+        """Return stock quote data for one symbol or a list of symbols."""
         return self._run(self._get_stock_quotes(symbol))
 
     def get_orderbook(self, symbol: str) -> OrderBook | None:
+        """Return bid and ask order book rows for a stock symbol."""
         return self._run(self._get_orderbook(symbol))
 
     def get_future_info(self, symbol: str) -> FuturesProduct | None:
+        """
+        Return futures product metadata for a root symbol such as `/ES`.
+
+        Use this for futures product symbols, not exact futures contract symbols
+        such as `/ESM26`.
+        """
         return self._run(self._get_future_info(symbol))
 
     @overload
@@ -116,11 +137,18 @@ class Robinhood(_CoreRobinhood):
 
     @cache
     def get_all_futures_products(self) -> list[FuturesProduct] | None:
+        """Return all futures products, cached for the current process."""
         return self._run(self._get_all_futures_products())
 
     def get_active_contracts_for_id(
         self, id: str
     ) -> list[FuturesContract] | None:
+        """
+        Return active futures contracts for a futures product id.
+
+        The result is sorted by earliest expiration. Product ids are available
+        from `FuturesProduct.id`.
+        """
         return self._run(self._get_active_contracts_for_id(id))
 
     def get_expiration_dates(self, symbol: str) -> list[str] | None:
@@ -215,6 +243,12 @@ class Robinhood(_CoreRobinhood):
         dollar_based_amount: float | None = None,
         currency_code: str = "USD",
     ) -> StockOrderResponse | None:
+        """
+        Place a limit stock order.
+
+        Provide `quantity` for a share-based order. `market_hours` defaults to
+        regular hours and `time_in_force` defaults to `gtc`.
+        """
         return self._run(
             self._place_limit_stock_order(
                 symbol,
@@ -240,6 +274,12 @@ class Robinhood(_CoreRobinhood):
         quantity: float | None = None,
         currency_code: str = "USD",
     ) -> StockOrderResponse | None:
+        """
+        Place a market stock order.
+
+        Use either `dollar_based_amount` or `quantity`. `market_hours` defaults
+        to regular hours and `time_in_force` defaults to `gtc`.
+        """
         return self._run(
             self._place_market_stock_order(
                 symbol,

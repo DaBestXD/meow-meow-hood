@@ -1,3 +1,5 @@
+"""Dataclasses returned by the Robinhood public clients."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +9,8 @@ from typing import Any, Literal, Self, TypedDict, get_type_hints
 
 
 class ApiPayloadMixin:
+    """Build dataclass instances from Robinhood JSON payloads."""
+
     @classmethod
     @cache
     def _test(cls):
@@ -24,6 +28,7 @@ class ApiPayloadMixin:
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create an instance from a Robinhood JSON payload."""
         return cls(**cls._filter_dict(payload, *cls._test()))
 
     @staticmethod
@@ -46,10 +51,11 @@ class ApiPayloadMixin:
 @dataclass(frozen=True, kw_only=True)
 class OptionRequest:
     """
-    Fields:
-        symbol, option_type, strike_price, exp_date, chain_id
-    Only required field is symbol
-    Optional fields allow for greater control of returned data
+    Filter object used when requesting option data or building option orders.
+
+    `symbol` is required. `exp_date`, `option_type`, and `strike_price` narrow
+    market-data requests. `position_effect` and `side` are used for option
+    orders.
     """
 
     symbol: str
@@ -96,12 +102,15 @@ class FullQuote(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class IndexQuote(ApiPayloadMixin):
+    """Latest quote value for an index symbol."""
+
     symbol: str
     value: float
     instrument_id: str
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create an index quote from a nested Robinhood payload."""
         return cls(**cls._filter_dict(payload, *cls._test()))
 
 
@@ -204,6 +213,8 @@ class OptionGreekData(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class StockInfo(ApiPayloadMixin):
+    """Stock instrument metadata returned by `get_stock_info()`."""
+
     id: str
     url: str
     quote: str
@@ -224,6 +235,8 @@ class StockInfo(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class StockPosition(ApiPayloadMixin):
+    """Current account stock position."""
+
     symbol: str
     quantity: float
     type: str
@@ -233,6 +246,8 @@ class StockPosition(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class OptionPosition(ApiPayloadMixin):
+    """Current account option position."""
+
     account: str
     account_number: str
     average_price: float
@@ -267,6 +282,8 @@ class OptionPosition(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class StockOrder(ApiPayloadMixin):
+    """Historical stock order row."""
+
     id: str
     instrument_id: str
     side: str
@@ -282,6 +299,7 @@ class StockOrder(ApiPayloadMixin):
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create a stock order row and normalize notional price data."""
         data = cls._filter_dict(payload, *cls._test())
         total_notional = payload.get("total_notional") or {}
         data["price"] = float(total_notional.get("amount", 0.0) or 0.0)
@@ -290,6 +308,8 @@ class StockOrder(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class MoneyAmount(ApiPayloadMixin):
+    """Money amount with currency metadata."""
+
     amount: float
     currency_code: str
     currency_id: str | None = None
@@ -297,6 +317,8 @@ class MoneyAmount(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class StockOrderResponse(ApiPayloadMixin):
+    """Response returned after submitting a stock order."""
+
     id: str
     ref_id: str
     account: str
@@ -335,6 +357,7 @@ class StockOrderResponse(ApiPayloadMixin):
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create a stock order response and normalize nested money amounts."""
         normalized_payload = dict(payload)
         normalized_payload["cancel_url"] = payload["cancel"]
         data = cls._filter_dict(normalized_payload, *cls._test())
@@ -356,6 +379,8 @@ class StockOrderResponse(ApiPayloadMixin):
 
 @dataclass
 class StockOrderPost:
+    """Base payload used when submitting a stock order."""
+
     account: str
     instrument: str
     market_hours: str
@@ -374,16 +399,22 @@ class StockOrderPost:
 
 @dataclass
 class StockOrderStockAmount(StockOrderPost):
+    """Stock order payload with a share quantity."""
+
     quantity: str
 
 
 @dataclass
 class StockOrderDollarAmount(StockOrderPost):
+    """Stock order payload with a notional dollar amount."""
+
     dollar_based_amount: dict[str, str]
 
 
 @dataclass
 class StockOrderLimit(StockOrderPost):
+    """Limit stock order payload."""
+
     type: Literal["market", "limit"]
     price: str
     quantity: str
@@ -391,6 +422,8 @@ class StockOrderLimit(StockOrderPost):
 
 @dataclass(frozen=True, slots=True)
 class OptionOrderLeg(ApiPayloadMixin):
+    """Single leg returned in option order history."""
+
     side: str
     expiration_date: str
     option_type: str
@@ -400,6 +433,8 @@ class OptionOrderLeg(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class OptionOrderHistory(ApiPayloadMixin):
+    """Historical option order row."""
+
     id: str
     chain_symbol: str
     direction: str
@@ -413,6 +448,7 @@ class OptionOrderHistory(ApiPayloadMixin):
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create an option order history row and normalize order legs."""
         data = cls._filter_dict(payload, *cls._test())
         data["price"] = float(payload.get("net_amount", 0.0) or 0.0)
         data["legs"] = [
@@ -424,6 +460,8 @@ class OptionOrderHistory(ApiPayloadMixin):
 
 @dataclass(slots=True)
 class BidAsk:
+    """Single bid or ask row in an order book."""
+
     side: Literal["bid", "ask"]
     price: float
     quantity: int
@@ -431,11 +469,14 @@ class BidAsk:
 
 @dataclass(frozen=True, slots=True)
 class OrderBook:
+    """Bid and ask rows for a stock instrument."""
+
     asks: list[BidAsk]
     bids: list[BidAsk]
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create an order book from Robinhood bid and ask rows."""
         data = {}
         data["asks"] = [
             BidAsk(b["side"], float(b["price"]["amount"]), int(b["quantity"]))
@@ -450,6 +491,8 @@ class OrderBook:
 
 @dataclass(frozen=True, slots=True)
 class IndexInfo(ApiPayloadMixin):
+    """Index instrument metadata returned by `get_index_info()`."""
+
     id: str
     simple_name: str
     symbol: str
@@ -458,11 +501,14 @@ class IndexInfo(ApiPayloadMixin):
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create index metadata from a Robinhood payload."""
         return cls(**cls._filter_dict(payload, *cls._test()))
 
 
 @dataclass(frozen=True, slots=True)
 class Index(ApiPayloadMixin):
+    """Index item returned inside watchlist data."""
+
     name: str
     symbol: str
     object_id: str
@@ -474,6 +520,8 @@ class Index(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class CurrencyPair(ApiPayloadMixin):
+    """Currency pair item returned inside watchlist data."""
+
     name: str
     symbol: str
     object_id: str
@@ -484,6 +532,8 @@ class CurrencyPair(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class Instrument(ApiPayloadMixin):
+    """Equity instrument item returned inside watchlist data."""
+
     name: str
     symbol: str
     object_id: str
@@ -499,6 +549,8 @@ class Instrument(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class Future(ApiPayloadMixin):
+    """Future item returned inside watchlist data."""
+
     symbol: str
     object_id: str
     name: str
@@ -507,6 +559,8 @@ class Future(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class OptionStrategy(ApiPayloadMixin):
+    """Option strategy item returned inside watchlist data."""
+
     object_id: str
     open_price_direction: str
     name: str
@@ -515,6 +569,7 @@ class OptionStrategy(ApiPayloadMixin):
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
+        """Create a watchlist option strategy from a nested price payload."""
         non_float_keys, float_keys, int_keys = cls._test()
         float_keys = float_keys - {"open_price_without_tvm"}
         data = cls._filter_dict(payload, non_float_keys, float_keys, int_keys)
@@ -526,6 +581,8 @@ class OptionStrategy(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class WatchList:
+    """Named watchlist and its mixed item collection."""
+
     name: str
     id: str
     items: list[CurrencyPair | Future | Instrument | OptionStrategy]
@@ -540,6 +597,8 @@ class _OptionLeg(TypedDict):
 
 @dataclass(frozen=True, kw_only=True)
 class OptionOrder:
+    """Payload used when submitting an option order."""
+
     account: str
     direction: Literal["debit", "credit"]
     form_source: str = "option_chain"
@@ -556,6 +615,8 @@ class OptionOrder:
 
 @dataclass(frozen=True)
 class OptionOrderResponse(ApiPayloadMixin):
+    """Response returned after submitting an option order."""
+
     id: str
     chain_symbol: str
     cancel_url: str
@@ -567,6 +628,8 @@ class OptionOrderResponse(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class FuturesProduct(ApiPayloadMixin):
+    """Futures product metadata."""
+
     id: str
     symbol: str
     displaySymbol: str
@@ -579,6 +642,8 @@ class FuturesProduct(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class FuturesContract(ApiPayloadMixin):
+    """Tradable futures contract metadata."""
+
     id: str
     productId: str
     symbol: str
@@ -597,6 +662,8 @@ class FuturesContract(ApiPayloadMixin):
 
 @dataclass(frozen=True, slots=True)
 class FuturesQuote(ApiPayloadMixin):
+    """Latest quote for a futures contract."""
+
     ask_price: float
     ask_size: int
     ask_venue_timestamp: str

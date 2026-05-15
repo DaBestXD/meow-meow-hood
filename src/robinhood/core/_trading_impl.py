@@ -1,3 +1,5 @@
+"""Trading implementation methods for stock and option orders."""
+
 from __future__ import annotations
 
 import logging
@@ -32,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 class TradingImpl(TypingBase):
+    """Mixin containing stock and option order submission helpers."""
+
     async def _stock_order_factory(
         self,
         symbol: str,
@@ -132,6 +136,10 @@ class TradingImpl(TypingBase):
         dollar_based_amount: float | None = None,
         currency_code: str = "USD",
     ):
+        """
+        Defaults to regular_hours use extended_hours when needed.
+        Defaults to 'gtc' swap to 'gfd' when needed.
+        """
         self._malform_order_check(
             side,
             dollar_based_amount,

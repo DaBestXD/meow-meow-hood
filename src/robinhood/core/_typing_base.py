@@ -1,3 +1,5 @@
+"""Protocol-like base used for typing shared implementation mixins."""
+
 from typing import overload
 
 from robinhood.api_dataclasses import (
@@ -12,6 +14,8 @@ from robinhood.db_logic.option_cache import OptionCache
 
 
 class TypingBase:
+    """Attributes and method shapes shared by implementation mixins."""
+
     def __init__(self) -> None:
         self.user_id: int | str
         self._async_http_client: RobinhoodAsyncHTTPClient

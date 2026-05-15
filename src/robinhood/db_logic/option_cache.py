@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 class OptionCache:
+    """Local SQLite cache for option chain and instrument metadata."""
+
     def __init__(self, db_path: Path, prune_expired: bool = True) -> None:
         self.db_path = db_path
         self.con = sqlite3.connect(db_path)
@@ -35,10 +37,12 @@ class OptionCache:
         self.prune_expired() if prune_expired else None
 
     def close(self) -> None:
+        """Close the SQLite connection."""
         self.con.close()
         logger.debug("Option Cache Closed")
 
     def init_db(self) -> None:
+        """Create cache tables and indexes if they do not already exist."""
         self.con.execute(MAIN_TABLE)
         self.con.execute(OPTION_IDS_TABLE)
         self.con.execute(EXPIRATION_DATES_TABLE)
@@ -60,6 +64,7 @@ class OptionCache:
 
     @staticmethod
     def now_edt_timestamp() -> int:
+        """Return the current America/New_York timestamp."""
         return int((datetime.now(ZoneInfo("America/New_York"))).timestamp())
 
     @staticmethod
@@ -271,7 +276,7 @@ class OptionCache:
         self.con.commit()
 
     # Current caching strategy Symbol only, or Symbol and exp_date
-    # TODO option type sync later
+    # TODO: option type sync later
     def sync_option_request_dispatch(
         self,
         option_request: OptionRequest,

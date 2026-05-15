@@ -1,3 +1,5 @@
+"""Account, position, order history, and watchlist implementation methods."""
+
 from __future__ import annotations
 
 import logging
@@ -31,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 
 class AccountImpl(TypingBase):
+    """Mixin containing account and watchlist request implementations."""
+
     async def _get_account_stock_positions(
         self,
     ) -> list[StockPosition] | None:
@@ -84,6 +88,7 @@ class AccountImpl(TypingBase):
         return option_orders
 
     async def _get_stock_order_history(self) -> list[StockOrder] | None:
+        """Returns a list of StockOrder classes"""
         if isinstance(self.user_id, int):
             logger.warning("user_id not valid")
             return None
@@ -99,6 +104,16 @@ class AccountImpl(TypingBase):
         return stock_orders
 
     async def _get_watchlists(self) -> list[WatchList] | None:
+        """
+        Returns list of Watchlist classes
+        To each item from the watchlist use `watchlist.items`
+        This function will always return your options watchlist
+        Possible items:
+        -`OptionStrategy`
+        -`Instrument`
+        -`Future`
+        -`CurrencyPair`
+        """
         res_json = await self._async_http_client._get(API_WATCHLIST_DEFAULT)
         if not res_json:
             return None
@@ -120,6 +135,9 @@ class AccountImpl(TypingBase):
     async def _watchlist_helper(
         self, id: str
     ) -> list[OptionStrategy | Instrument | Future | CurrencyPair]:
+        """
+        Helper function to normalize json into watchlist item classes
+        """
         params = {
             PARAM_LIST_ID: id,
             # This is needed for the options watchlist

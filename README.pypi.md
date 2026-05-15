@@ -1,143 +1,143 @@
 # Meow-Meow-Hood API
 
-A Robinhood API wrapper for fast option market data
+A Python wrapper around Robinhood's private API with a focus on option market
+data, local option metadata caching, and simple sync or async clients.
 
 ## Installation
 
-`uv add meow-meow-hood`\
-`pip install meow-meow-hood`
+Requires Python 3.11 or newer.
 
-## Why?
-
-If you're using Robinhood as a broker still...\
-And if you want to view option market data at a reasonable speed.
-This was made for fun.
-
-## Authentication
-
-Ensure you are logged in locally to Robinhood on either:
-
-- Chrome
-- Firefox
-
-It works by extracting a locally stored access token from your browser data.\
-By default the client automatically checks Chrome first and then Firefox for a
-valid token.\
-If a stored token is rejected and `open_browser=True`, the refresh helper may
-briefly open the installed browsers to refresh auth state.\
-This behavior can be disabled on class creation with `extract_token=False`.\
-You will need to pass in the access token manually if token extraction is
-disabled.\
-Config folder is created at the cwd labeled `.meow-meow-hood`.\
-If cache enabled db file is placed inside this folder. Same for extract_token.
-
-```python
-Robinhood(extract_token=False, access_token="...")
+```bash
+uv add meow-meow-hood
+# or
+pip install meow-meow-hood
 ```
 
-## Usage
-
-JSON responses are returned as named data classes for easier parsing.\
-Examples: `FullQuote`, `OptionInstrument`, `OptionGreekData`, etc.\
+Import from the `robinhood` package:
 
 ```python
-@dataclass(frozen=True, slots=True)
-class FullQuote(ApiPayloadMixin):
-    ask_price: float
-    ask_size: int
-    bid_price: float
-    bid_size: int
-    ...
+from robinhood import OptionRequest, Robinhood
 ```
 
-(*Refer to robinhood/api_dataclasses.py
-for full implementation details.*)
+## Authentication And Config
 
-`OptionRequest` is the main class when requesting option data.
+By default, `Robinhood()` tries to find a locally stored Robinhood browser token.
+You must already be logged in to Robinhood in a local Chrome or Firefox profile.
+
+The client creates a config directory named `.meow-meow-config` under
+`config_path`, which defaults to the current working directory. Generated files
+are stored there:
+
+- `.env` stores `BEARER_TOKEN` and `ACCOUNT_NUMBER` when token extraction writes
+  credentials.
+- `meow-meow-hood.db` stores the local SQLite option metadata cache when
+  `enable_cache=True`.
+
+Useful setup options:
 
 ```python
-OptionRequest(
-    *,
-    symbol: str,
-    exp_date: str | None = None,
-    option_type: Literal['call', 'put'] | None = None,
-    strike_price: float | None = None
-)
+from pathlib import Path
+
+from robinhood import Robinhood
+
+with Robinhood(extract_token=False, access_token="...") as rh:
+    quote = rh.get_stock_quotes("SPY")
+
+with Robinhood(config_path=Path.home() / ".config") as rh:
+    quote = rh.get_stock_quotes("SPY")
 ```
 
-Example:
+If a saved token is rejected and `open_browser=True`, the refresh flow may open
+Chrome and Firefox briefly to refresh local auth state. This can close existing
+browser windows, so set `open_browser=False` when that behavior is not desired.
+
+## Quickstart
 
 ```python
-# With context manager
+from robinhood import OptionRequest, Robinhood
+
 with Robinhood() as rh:
-  spy_dates: list[str] = rh.get_expiration_dates("SPY")
-  spy_request1 = OptionRequest(symbol="SPY", exp_date=spy_dates[0])
-  spy_option_data = rh.get_option_greeks_batch_request(spy_request1)
-  for option_request, options in spy_option_data.items():
-    print(option_request, len(options))
+    quote = rh.get_stock_quotes("SPY")
+    if quote is not None:
+        print(quote.bid_price, quote.ask_price)
 
-# No context manager
-rh = Robinhood()
-spy_quote: FullQuote = rh.get_stock_quotes("SPY")
-print(spy_quote.ask_price)
-rh.close()
+    dates = rh.get_expiration_dates("SPY")
+    if not dates:
+        raise RuntimeError("No SPY expiration dates returned")
 
+    request = OptionRequest(symbol="SPY", exp_date=dates[0])
+    greeks_by_request = rh.get_option_greeks_batch_request(request)
 
+    for greek in greeks_by_request[request][:3]:
+        print(greek.symbol, greek.delta, greek.mark_price)
 ```
 
-## Local caching
+JSON responses are normalized into dataclasses such as `FullQuote`,
+`OptionChain`, `OptionGreekData`, `StockPosition`, and `WatchList`.
 
-This library uses a local SQLite database to cache option
-instruments and reduce the amount of requests made per call.\
-Cache is validated with a TTL of the next day at 9:30 EDT.\
-*See /docs/design_notes.md for more details*
+## Local Caching
 
-Example where caching improves speed.
+The local SQLite cache stores option chain metadata, expiration dates, option
+instrument ids, and sync rows. It reduces the number of Robinhood API calls
+needed before fetching live option greek data.
+
+Cache TTLs expire at the next trading day open, `9:30 AM America/New_York`.
+Broad option requests are the most cache-friendly:
+
+- `OptionRequest(symbol="SPY")`
+- `OptionRequest(symbol="SPY", exp_date="2026-04-17")`
+
+Requests narrowed by `option_type` or `strike_price` can reuse cached
+instrument ids, but they do not create their own sync rows yet.
 
 ```python
-with Robinhood(enable_cache = True) as rh:
-  dates = rh.get_expiration_dates("SPY")
-  strike_map = rh.get_strike_prices(symbol="SPY",exp_date=dates[0])
-  call_request = OptionRequest(
-    symbol="SPY",
-    exp_date=dates[0],
-    option_type="call",
-  )
-  strikes = strike_map[call_request]
-  spy_option_list = []
-  # Generate a list of OptionRequests you want to view
-  for s in strikes:
-    opt_req = OptionRequest(symbol="SPY",exp_date=dates[0],strike_price=s)
-    spy_option_list.append(opt_req)
+from robinhood import OptionRequest, Robinhood
 
-  while True:
-    option_data = rh.get_option_greeks_batch_request(spy_option_list)
-    for option_request, options in option_data.items():
-      option = options[0]
-      print(option_request.strike_price, option.ask_price, option.bid_price)
-    # Delay should be added to avoid rate limit
-    time.sleep(0.25)
+with Robinhood(enable_cache=True) as rh:
+    dates = rh.get_expiration_dates("SPY")
+    if not dates:
+        raise RuntimeError("No SPY expiration dates returned")
 
-
+    request = OptionRequest(symbol="SPY", exp_date=dates[0])
+    greeks_by_request = rh.get_option_greeks_batch_request(request)
+    print(len(greeks_by_request[request]))
 ```
 
-## Trust Me Bro Benchmarks
+## Return Values And Errors
 
-Benchmark summary for 10 symbols[^benchmark-symbols] and the second nearest
-expiration date across 10 runs(~1.6k options returned per run).
+Many read methods return `None` when Robinhood returns no usable data. Batch
+option methods generally return a dictionary keyed by `OptionRequest`, with an
+empty list for requests that could not be resolved.
 
-| Metric | Cold Cache | Warm Cache | Improvement |
-| --- | ---: | ---: | ---: |
-| Average `get_expiration_dates` time | 0.06957s | 0.00013s | 99.81% |
-| Average `get_strike_prices` time | 0.31505s | 0.00029s | 99.91% |
-| Average `get_option_greeks_batch_request` time | 3.48793s | 1.18787s | 65.94% |
-| Average total time per run | 7.33413s | 1.19204s | 83.75% |
+HTTP behavior to expect:
 
-`Cold cache` represents a run without any cached option data. `Warm cache`
-represents a run with cache hits.
+- `401` and `403` raise `RuntimeError` with an invalid-token message.
+- `429` and `5xx` currently raise `NotImplementedError`.
+- Other unexpected statuses are logged by the HTTP layer.
 
-[^benchmark-symbols]: SPY, TSLA, QQQ, NVDA, GOOG, MSFT, AMZN, TSM, META, JPM
+Trading helpers can raise package errors such as `MalformedOrderError`,
+`InstruemtNotFoundError`, or `AccountIdNotFoundError` when an order cannot be
+validated locally before submission.
 
-## TODO log
+## More Documentation
 
-See /docs/todo.md for planned features.
+- Examples: `docs/examples.md`
+- API reference: `docs/api_reference.md`
+- Cache schema: `docs/db_schema.md`
+- Design notes: `docs/design_notes.md`
+- TODO log: `docs/todo.md`
+
+## Development
+
+```bash
+python -m unittest discover -s tests
+ruff check .
+ruff format --check .
+pyright
+python -m benchmarks.benchmark_api_requests
+```
+
+## License And Versioning
+
+The project is MIT licensed. The current package version is declared in
+`pyproject.toml`.

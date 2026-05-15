@@ -1,3 +1,5 @@
+"""Shared implementation used by the sync and async public clients."""
+
 from __future__ import annotations
 
 import asyncio
@@ -69,8 +71,10 @@ class _CoreRobinhood(
         access_token: str | None = None,
     ) -> None:
         """
-        Core implementation of the robinhood class for both sync
-        and async classes.
+        Initialize shared auth, cache, logging, and HTTP-client state.
+
+        This base class powers both `Robinhood` and `AsyncRobinhood`. Public
+        users normally instantiate one of those concrete clients.
         """
         self.event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         configure_logger(logging_level, log_handler)
@@ -147,4 +151,5 @@ class _CoreRobinhood(
             logger.warning("No db enabled! Nothing to execute!")
             return None
         else:
+            logger.debug("Exexuting %s with args %s", query, args)
             return self._db_cache.execute_query_with_args(query, args)

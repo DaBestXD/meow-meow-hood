@@ -1,3 +1,5 @@
+"""Option chain, option instrument, and option greek implementation methods."""
+
 from __future__ import annotations
 
 import asyncio
@@ -36,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 
 class OptionsImpl(TypingBase):
+    """Mixin containing option market-data request implementations."""
+
     async def _get_expiration_dates(self, symbol: str) -> list[str] | None:
         """
         Returns option_expiration dates for a given symbol as
@@ -270,7 +274,10 @@ class OptionsImpl(TypingBase):
     async def _get_option_chain_data(
         self, symbol: str | list[str]
     ) -> list[OptionChain] | OptionChain | None:
-        """Return option chain metadata for one symbol or many symbols."""
+        """
+        Return option chain metadata for one symbol or many symbols.
+        Warning this endpoint has a strict limit of ~4 req/s
+        """
         if isinstance(symbol, str):
             res_json = await self._async_http_client._get(
                 API_OPTION_CHAINS + f"{symbol}/"

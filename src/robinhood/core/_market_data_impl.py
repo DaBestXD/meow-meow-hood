@@ -1,3 +1,5 @@
+"""Market data implementation methods for stocks, indexes, and futures."""
+
 from __future__ import annotations
 
 import logging
@@ -35,6 +37,8 @@ logger = logging.getLogger(__name__)
 
 
 class MarketDataImpl(TypingBase):
+    """Mixin containing stock, index, order book, and futures requests."""
+
     @overload
     async def _get_stock_info(self, symbols: str) -> StockInfo | None: ...
 
@@ -76,6 +80,7 @@ class MarketDataImpl(TypingBase):
         self,
         symbols: str | list[str],
     ) -> list[IndexInfo] | IndexInfo | None:
+        """Return index metadata for one symbol or a list of symbols."""
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
         params = {PARAM_SYMBOLS: symbols}
@@ -101,6 +106,7 @@ class MarketDataImpl(TypingBase):
     async def _get_index_quotes(
         self, symbols: str | list[str]
     ) -> list[IndexQuote] | IndexQuote | None:
+        """Returns IndexQuote classes for one symbol or a list of symbols"""
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
         params = {PARAM_SYMBOLS: symbols}
@@ -129,7 +135,7 @@ class MarketDataImpl(TypingBase):
     ) -> FullQuote | list[FullQuote] | None:
         """
         Returns a list of FullQuote dataclasses
-        Usage: stock = get_stock_quotes("SPY")
+        Ensure symbols are capitalized
         """
         symbol = [symbol] if isinstance(symbol, str) else symbol
         joined_symbol = ",".join(symbol)
@@ -228,10 +234,6 @@ class MarketDataImpl(TypingBase):
     ) -> list[FuturesProduct] | None:
         """
         Return a list of all Futures Products
-        Runtime cache idk how this will impact memory usage but
-        I can't be assed to create a new table and entries, and
-        table prunning, etc...
-        Def a todo and move away from @cache deco.
         """
         res_json = await self._async_http_client._get(API_FUTURES_PRODUCTS)
         if not res_json:
