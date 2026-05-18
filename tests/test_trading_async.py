@@ -134,7 +134,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
         client._async_http_client._post.return_value = response_payload
 
         result = await client._place_market_stock_order(
-            "SPY",
+            "spy",
             "buy",
             dollar_based_amount=25.0,
         )

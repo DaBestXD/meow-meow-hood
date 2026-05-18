@@ -32,8 +32,9 @@ class RobinhoodAsyncHTTPClient:
         """
         Raise the current package-level error for HTTP response statuses.
 
-        `401` and `403` raise `RuntimeError`. `429` and `5xx` currently raise
-        `NotImplementedError` until retry and rate-limit handling are added.
+        `401` and `403` raise `AuthenticationError`. `429` and `5xx` currently
+        raise `NotImplementedError` until retry and rate-limit handling is
+        added.
         Other statuses are logged and return `None`.
         """
         if status_code >= 500:
@@ -102,6 +103,16 @@ class RobinhoodAsyncHTTPClient:
             return await self._page_get(
                 next_link, results=res_json.get(RESULTS, [])
             )
+
+    async def _download(
+        self, endpoint: str, base_api_link: str = BASE_API_LINK
+    ):
+        session = await self.create_client_session()
+        async with session.get(
+            url=base_api_link + endpoint,
+        ) as res:
+            res.raise_for_status()
+            return await res.read()
 
     async def _post(
         self,

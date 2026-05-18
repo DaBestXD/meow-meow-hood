@@ -7,6 +7,7 @@ import aiohttp
 
 from robinhood.constants import BASE_API_BONFIRE_LINK, BASE_API_LINK
 from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
+from robinhood.errors import AuthenticationError
 from tests.support import build_http_client
 
 
@@ -234,7 +235,9 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NotImplementedError):
             client._error_status_code_handler("/quotes/", 429)
 
-    def test_error_status_code_handler_logs_critical_on_403(self) -> None:
+    def test_error_status_code_handler_raises_authentication_error_on_403(
+        self,
+    ) -> None:
         client = build_http_client()
 
         with (
@@ -243,7 +246,7 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
                 level="CRITICAL",
             ) as logs,
             self.assertRaisesRegex(
-                RuntimeError,
+                AuthenticationError,
                 "Access token invalid, relogin into robinhood",
             ),
         ):

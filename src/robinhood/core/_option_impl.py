@@ -29,7 +29,8 @@ from robinhood.constants import (
     PARAM_TRADABLE_CHAIN_ID,
 )
 from robinhood.core._typing_base import TypingBase
-from robinhood.option_matching import (
+from robinhood.utils._normalize_symbol import uppercase_input
+from robinhood.utils.option_matching import (
     map_option_requests_to_ois,
     match_req_to_oi,
 )
@@ -45,6 +46,7 @@ class OptionsImpl(TypingBase):
         Returns option_expiration dates for a given symbol as
         a list of strings, date format in yyyy-mm-dd
         """
+        symbol = uppercase_input(symbol)
         if self._db_cache and self._db_cache.is_option_chain_synced(symbol):
             dates = self._db_cache.fetch_expiration_dates_for_symbol(symbol)
             if dates:
@@ -73,6 +75,7 @@ class OptionsImpl(TypingBase):
         """
         Returns a dict of OptionRequest and a list of strike prices
         """
+        symbol = uppercase_input(symbol)
         base_request = OptionRequest(symbol=symbol, exp_date=exp_date)
         call_request = OptionRequest(
             symbol=symbol, option_type="call", exp_date=exp_date
@@ -278,6 +281,7 @@ class OptionsImpl(TypingBase):
         Return option chain metadata for one symbol or many symbols.
         Warning this endpoint has a strict limit of ~4 req/s
         """
+        symbol = uppercase_input(symbol)
         if isinstance(symbol, str):
             res_json = await self._async_http_client._get(
                 API_OPTION_CHAINS + f"{symbol}/"

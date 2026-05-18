@@ -1,7 +1,7 @@
 import logging
 import unittest
 
-from robinhood.configure_logger import MISSING, configure_logger
+from robinhood.utils.configure_logger import MISSING, configure_logger
 
 
 class TestConfigureLogger(unittest.TestCase):

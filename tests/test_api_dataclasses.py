@@ -9,6 +9,7 @@ from robinhood.api_dataclasses import (
     OptionGreekData,
     OptionOrderHistory,
     OptionPosition,
+    OptionRequest,
     OrderBook,
     StockInfo,
     StockOrder,
@@ -28,6 +29,11 @@ from tests.support import (
 
 
 class TestApiDataclasses(unittest.TestCase):
+    def test_option_request_normalizes_symbol(self):
+        request = OptionRequest(symbol="spy", exp_date="2026-04-17")
+
+        self.assertEqual("SPY", request.symbol)
+
     def test_option_greek_data_from_json_coerces_numeric_fields(self):
         payload = asdict(build_option_greek_data())
         payload["ask_price"] = "1.25"

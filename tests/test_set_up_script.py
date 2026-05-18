@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from robinhood.set_up_script import DEFAULT_CONFIG_NAME, set_up
+from robinhood.utils.set_up_script import DEFAULT_CONFIG_NAME, set_up
 
 
 class TestSetUpScript(unittest.TestCase):

@@ -7,6 +7,8 @@ from functools import cache
 from types import NotImplementedType
 from typing import Any, Literal, Self, TypedDict, get_type_hints
 
+from robinhood.utils._normalize_symbol import uppercase_input
+
 
 class ApiPayloadMixin:
     """Build dataclass instances from Robinhood JSON payloads."""
@@ -64,6 +66,9 @@ class OptionRequest:
     strike_price: float | None = None
     position_effect: Literal["open", "close"] | None = None
     side: Literal["sell", "buy"] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "symbol", uppercase_input(self.symbol))
 
     def __mul__(self, num: int) -> list[Self]:
         if not isinstance(num, int):
@@ -678,3 +683,28 @@ class FuturesQuote(ApiPayloadMixin):
     state: str
     updated_at: str
     out_of_band: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AchTransfer(ApiPayloadMixin):
+    id: str
+    originating_account_id: str
+    originating_account_type: str
+    transfer_type: str
+    amount: float
+    currency: str
+    direction: str
+    state: str
+    created_at: str
+    net_amount: float
+
+
+@dataclass(frozen=True, slots=True)
+class RobinhoodAccount(ApiPayloadMixin):
+    url: str
+    portfolio_cash: float
+    account_number: str
+    type: str
+    buying_power: str
+    cash_available_for_withdrawal_without_margin: str
+    option_level: str

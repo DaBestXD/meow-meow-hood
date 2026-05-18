@@ -17,7 +17,12 @@ from pathlib import Path
 import requests
 import snappy
 
-from robinhood.constants import ACCOUNT_NUMBER, API_ACCOUNT, RESULTS
+from robinhood.constants import (
+    ACCOUNT_NUMBER,
+    API_ACCOUNT,
+    BASE_API_LINK,
+    RESULTS,
+)
 
 CHROME_DB_NAME = Path("https_robinhood.com_0.indexeddb.leveldb")
 HOME_DIR = Path.home()
@@ -167,7 +172,7 @@ def _chrome_db_parse(f: Path) -> str | None:
 def get_acc_id(bearer_token: str) -> str | int:
     """Return the account number for a bearer token or the HTTP status code."""
     headers = {"authorization": f"Bearer {bearer_token}"}
-    r = requests.get(API_ACCOUNT, headers=headers)
+    r = requests.get(BASE_API_LINK + API_ACCOUNT, headers=headers)
     if r.status_code == 200:
         # returns the list account back
         return r.json()[RESULTS][0][ACCOUNT_NUMBER]

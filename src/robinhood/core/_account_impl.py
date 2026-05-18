@@ -5,23 +5,28 @@ from __future__ import annotations
 import logging
 
 from robinhood.api_dataclasses import (
+    AchTransfer,
     CurrencyPair,
     Future,
     Instrument,
     OptionOrderHistory,
     OptionPosition,
     OptionStrategy,
+    RobinhoodAccount,
     StockOrder,
     StockPosition,
     WatchList,
 )
 from robinhood.constants import (
+    API_ACCOUNT,
     API_NON_OPTION_ORDER_HISTORY,
     API_OPTION_ORDER_HISTORY,
     API_POSITIONS_NON_OPTIONS,
     API_POSITIONS_OPTIONS,
+    API_UNIFIED_TRANSFERS,
     API_WATCHLIST_DEFAULT,
     API_WATCHLIST_ITEMS,
+    BASE_API_BONFIRE_LINK,
     PARAM_ACCOUNT_NUMBER,
     PARAM_LIST_ID,
     PARAM_LOAD_ALL_ATTRIBUTES,
@@ -163,3 +168,38 @@ class AccountImpl(TypingBase):
             if item_type == "future":
                 items.append(Future.from_json(o))
         return items
+
+    async def _get_ach_transfers(
+        self, raw_json_response: bool = False
+    ) -> list[AchTransfer] | list[dict] | None:
+        """
+        Returns all ach transfers
+        Use `raw_json_response = True` for raw json response
+        """
+        res_json = await self._async_http_client._get(
+            API_UNIFIED_TRANSFERS, BASE_API_BONFIRE_LINK
+        )
+        if raw_json_response:
+            return res_json
+        return [AchTransfer.from_json(r) for r in res_json if r]
+
+    async def _get_accounts(
+        self, raw_json_response: bool = False
+    ) -> list[RobinhoodAccount] | list[dict] | None:
+        """
+        Returns all robinhood accounts
+        Use `raw_json_response = True` for raw json response
+        """
+        res_json = await self._async_http_client._get(API_ACCOUNT)
+        if raw_json_response:
+            return res_json
+        return [RobinhoodAccount.from_json(r) for r in res_json if r]
+
+    def _change_account(self, acc_id: str) -> None:
+        """
+        Changing account id will affect where stock/option orders
+        are placed
+        Sync function
+        """
+        self.user_id = acc_id
+        return None

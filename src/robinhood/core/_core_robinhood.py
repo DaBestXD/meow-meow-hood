@@ -37,15 +37,15 @@ from robinhood.browser_functions.token_functions import (
     _refresh_access_token,
     check_if_modified_date_within_range,
 )
-from robinhood.configure_logger import MISSING, configure_logger
 from robinhood.core._account_impl import AccountImpl
 from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
 from robinhood.core._market_data_impl import MarketDataImpl
 from robinhood.core._option_impl import OptionsImpl
 from robinhood.core._trading_impl import TradingImpl
 from robinhood.db_logic.option_cache import OptionCache
-from robinhood.set_up_script import set_up
-from robinhood.types import T
+from robinhood.utils.configure_logger import MISSING, configure_logger
+from robinhood.utils.set_up_script import set_up
+from robinhood.utils.types import T
 
 logger = logging.getLogger(__name__)
 

@@ -17,6 +17,7 @@
 import importlib.metadata as metadata
 
 from .api_dataclasses import (
+    AchTransfer,
     BidAsk,
     CurrencyPair,
     FullQuote,
@@ -34,6 +35,7 @@ from .api_dataclasses import (
     OptionRequest,
     OptionStrategy,
     OrderBook,
+    RobinhoodAccount,
     StockInfo,
     StockOrder,
     StockOrderResponse,
@@ -49,6 +51,7 @@ except metadata.PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
+    "AchTransfer",
     "AsyncRobinhood",
     "BidAsk",
     "CurrencyPair",
@@ -68,6 +71,7 @@ __all__ = [
     "OptionStrategy",
     "OrderBook",
     "Robinhood",
+    "RobinhoodAccount",
     "StockInfo",
     "StockOrder",
     "StockOrderResponse",

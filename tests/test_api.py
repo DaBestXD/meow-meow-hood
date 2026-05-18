@@ -94,7 +94,7 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
         quote_payload = build_full_quote_payload(symbol="SPY")
         client._async_http_client._get.return_value = [quote_payload]
 
-        result = await client.get_stock_quotes("SPY")
+        result = await client.get_stock_quotes("spy")
 
         self.assertEqual(FullQuote.from_json(quote_payload), result)
         client._async_http_client._get.assert_awaited_once_with(
@@ -113,7 +113,7 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
         expected = StockInfo.from_json(stock_info_payload)
         client._async_http_client._get.return_value = [stock_info_payload]
 
-        result = await client.get_stock_info(["SPY", "QQQ"])
+        result = await client.get_stock_info(["spy", "qqq"])
 
         self.assertEqual([expected], result)
         client._async_http_client._get.assert_awaited_once_with(
@@ -140,7 +140,7 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
             {"data": [{"data": vix_payload}, {"data": spx_payload}]}
         ]
 
-        result = await client.get_index_quotes(["VIX", "SPX"])
+        result = await client.get_index_quotes(["vix", "spx"])
 
         self.assertEqual(
             [
@@ -167,7 +167,7 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
             [chain_payload],
         ]
 
-        result = await client.get_option_chain_data(["BAD", "SPY"])
+        result = await client.get_option_chain_data(["bad", "spy"])
 
         self.assertEqual(OptionChain.from_json(chain_payload), result)
         self.assertEqual(

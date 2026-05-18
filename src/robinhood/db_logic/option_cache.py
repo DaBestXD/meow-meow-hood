@@ -13,6 +13,7 @@ from robinhood.api_dataclasses import (
     OptionRequest,
     StockInfo,
 )
+from robinhood.utils._normalize_symbol import uppercase_input
 
 from .db_schema import (
     EXPIRATION_DATES_TABLE,
@@ -129,6 +130,7 @@ class OptionCache:
         """
         Return whether cached option-chain data for symbol is still fresh.
         """
+        symbol = uppercase_input(symbol)
         query = """
             SELECT time_to_live FROM option_chain_sync
             WHERE symbol = :symbol
@@ -158,6 +160,7 @@ class OptionCache:
         Syncs a symbol for a trading day.
         This is used for ``fetch_expiration_dates_for_symbol()``
         """
+        symbol = uppercase_input(symbol)
         query = """
             INSERT OR REPLACE INTO option_chain_sync
             VALUES (:symbol, :time_to_live)
@@ -171,6 +174,7 @@ class OptionCache:
 
     def fetch_expiration_dates_for_symbol(self, symbol: str) -> list[str]:
         """DB caching method for option chain functions"""
+        symbol = uppercase_input(symbol)
         if not self.is_option_chain_synced(symbol):
             return []
         query = "SELECT exp_date FROM expiration_dates WHERE symbol = :symbol"
@@ -180,6 +184,7 @@ class OptionCache:
 
     def get_chain_id(self, symbol: str) -> str:
         """Return chain_id from symbol returns ``""`` if no match"""
+        symbol = uppercase_input(symbol)
         if not self.is_option_chain_synced(symbol):
             return ""
         query = "SELECT chain_id FROM main_stock_info WHERE symbol = :symbol"

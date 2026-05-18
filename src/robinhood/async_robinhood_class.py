@@ -5,6 +5,7 @@ from types import TracebackType
 from typing import Literal, Self, overload
 
 from robinhood.api_dataclasses import (
+    AchTransfer,
     FullQuote,
     FuturesContract,
     FuturesProduct,
@@ -18,6 +19,7 @@ from robinhood.api_dataclasses import (
     OptionPosition,
     OptionRequest,
     OrderBook,
+    RobinhoodAccount,
     StockInfo,
     StockOrder,
     StockOrderResponse,
@@ -307,3 +309,37 @@ class AsyncRobinhood(_CoreRobinhood):
             `OptionStrategy`, `Instrument`, `Future`, `CurrencyPair`
         """
         return await self._get_watchlists()
+
+    async def cancel_option_order(self, id: str) -> None:
+        """Use option order id from OptionOrderResponse to cancel"""
+        return await self._cancel_option_order(id)
+
+    async def cancel_stock_order(self, id: str) -> None:
+        """Use stock order id from StockOrderResponse to cancel"""
+        return await self._cancel_stock_order(id)
+
+    async def get_ach_transfers(
+        self, raw_json_response: bool = False
+    ) -> list[AchTransfer] | list[dict] | None:
+        """
+        Returns all ach transfers
+        Use `raw_json_response = True` for raw json response
+        """
+        return await self._get_ach_transfers(raw_json_response)
+
+    async def get_accounts(
+        self, raw_json_response: bool = False
+    ) -> list[RobinhoodAccount] | list[dict] | None:
+        """
+        Returns all robinhood accounts
+        Use `raw_json_response = True` for raw json response
+        """
+        return await self._get_accounts(raw_json_response)
+
+    def change_account(self, acc_id: str) -> None:
+        """
+        Changing account id will affect where stock/option orders
+        are placed
+        Sync function
+        """
+        return self._change_account(acc_id)

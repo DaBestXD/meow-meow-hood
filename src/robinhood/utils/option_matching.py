@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .api_dataclasses import OptionInstrument, OptionRequest
+from robinhood.api_dataclasses import OptionInstrument, OptionRequest
 
 
 def match_req_to_oi(

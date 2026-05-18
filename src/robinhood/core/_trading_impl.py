@@ -28,7 +28,8 @@ from robinhood.errors import (
     InstruemtNotFoundError,
     MalformedOrderError,
 )
-from robinhood.option_matching import map_option_requests_to_ois
+from robinhood.utils._normalize_symbol import uppercase_input
+from robinhood.utils.option_matching import map_option_requests_to_ois
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class TradingImpl(TypingBase):
         currency_code: str = "USD",
         price: float = -1,
     ) -> StockOrderLimit | StockOrderStockAmount | StockOrderDollarAmount:
+        symbol = uppercase_input(symbol)
         self._malform_order_check(
             side, dollar_based_amount, quantity, s_type, price
         )
@@ -140,6 +142,7 @@ class TradingImpl(TypingBase):
         Defaults to regular_hours use extended_hours when needed.
         Defaults to 'gtc' swap to 'gfd' when needed.
         """
+        symbol = uppercase_input(symbol)
         self._malform_order_check(
             side,
             dollar_based_amount,
@@ -183,6 +186,7 @@ class TradingImpl(TypingBase):
         If you use a stock_based_amount defaults to use the stock's
         ask price, use limit order for greater price control.
         """
+        symbol = uppercase_input(symbol)
         self._malform_order_check(
             side,
             dollar_based_amount,
@@ -283,3 +287,17 @@ class TradingImpl(TypingBase):
             logger.warning("Failed to place order for %s", option_legs)
             return None
         return OptionOrderResponse.from_json(res_json[0])
+
+    async def _cancel_option_order(self, id: str) -> None:
+        """Use option order id from OptionOrderResponse to cancel"""
+        await self._async_http_client._post(
+            endpoint=API_OPTION_ORDER + id + "/cancel/"
+        )
+        return None
+
+    async def _cancel_stock_order(self, id: str) -> None:
+        """Use stock order id from StockOrderResponse to cancel"""
+        await self._async_http_client._post(
+            endpoint=API_STOCK_ORDER + id + "/cancel/"
+        )
+        return None
