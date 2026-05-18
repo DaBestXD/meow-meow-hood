@@ -9,6 +9,7 @@ dependencies = [
   "python-dotenv>=1.2.2",
   "python-snappy>=0.7.3",
   "requests>=2.33.1",
+  "tzdata>=2026.2",
 ]
 license = "MIT"
 license-files = ["LICENSE"]

@@ -1,20 +1,26 @@
+"""Async HTTP client used by the public Robinhood clients."""
+
 import logging
 from typing import Any
 
 import aiohttp
 
 from robinhood.constants import BASE_API_LINK, RESULTS
+from robinhood.errors import AuthenticationError
 
 logger = logging.getLogger(__name__)
 
 
 class RobinhoodAsyncHTTPClient:
+    """Small aiohttp wrapper for Robinhood GET, POST, and paginated requests."""
+
     def __init__(self, access_token: str, user_agent: str | None) -> None:
         self.session: aiohttp.ClientSession | None = None
         self.access_token: str = access_token
         self.user_agent = user_agent
 
     async def close(self) -> None:
+        """Close the underlying aiohttp session when it exists."""
         if not self.session:
             return None
         await self.session.close()
@@ -24,25 +30,31 @@ class RobinhoodAsyncHTTPClient:
         self, endpoint: str, status_code: int
     ) -> None:
         """
-        Current logic is to sleep for 65 seconds after hitting a rate limit.
-        No retry is attempted and an empty value is returned
+        Raise the current package-level error for HTTP response statuses.
+
+        `401` and `403` raise `AuthenticationError`. `429` and `5xx` currently
+        raise `NotImplementedError` until retry and rate-limit handling is
+        added.
+        Other statuses are logged and return `None`.
         """
         if status_code >= 500:
             # TODO: add retry logic for 5XX errors
-            raise NotImplementedError
+            raise NotImplementedError(f"{endpoint}, {status_code}")
         if status_code == 429:
             logger.warning("429 error returned, you are being rate limited.")
             # TODO: change this to a hardblock maybe sleep for a minute?
-            raise NotImplementedError
+            raise NotImplementedError(f"{endpoint}, {status_code}")
         if status_code == 403 or status_code == 401:
-            # TODO: raise error here
             logger.critical("Access token invalid, relogin into robinhood")
-            raise RuntimeError("Access token invalid, relogin into robinhood")
+            raise AuthenticationError(
+                "Access token invalid, relogin into robinhood"
+            )
         else:
             logger.warning("%s returned: %d", endpoint, status_code)
         return None
 
     async def create_client_session(self) -> aiohttp.ClientSession:
+        """Create or return the cached aiohttp client session."""
         if not self.session:
             timeout = aiohttp.ClientTimeout(total=15, connect=5)
             headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -92,6 +104,16 @@ class RobinhoodAsyncHTTPClient:
                 next_link, results=res_json.get(RESULTS, [])
             )
 
+    async def _download(
+        self, endpoint: str, base_api_link: str = BASE_API_LINK
+    ):
+        session = await self.create_client_session()
+        async with session.get(
+            url=base_api_link + endpoint,
+        ) as res:
+            res.raise_for_status()
+            return await res.read()
+
     async def _post(
         self,
         endpoint: str,
@@ -106,12 +128,13 @@ class RobinhoodAsyncHTTPClient:
                 data=data,
                 json=json,
             ) as res:
-                res.raise_for_status()
                 logger.debug(
-                    "POST request: %s, data length: %d",
+                    "POST request: %s, data: %s json: %s",
                     endpoint,
-                    len(data) if data else 0,
+                    data if data else "none",
+                    json if json else "none",
                 )
+                res.raise_for_status()
                 return await res.json()
         except aiohttp.ClientResponseError as e:
             self._error_status_code_handler(endpoint, e.status)

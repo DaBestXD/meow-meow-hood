@@ -1,3 +1,5 @@
+"""Create local configuration directories for the Robinhood clients."""
+
 import logging
 from pathlib import Path
 
@@ -9,13 +11,13 @@ def set_up(
     config_dir: Path = Path.cwd(),
     config_name: str = DEFAULT_CONFIG_NAME,
 ) -> Path:
+    """Create and return the package config directory."""
     config_dir = config_dir / config_name
     try:
         config_dir.mkdir(parents=True, exist_ok=False)
         logger.debug("Creating config folder in %s", str(config_dir))
     except FileExistsError:
         logger.debug("Config folder already exists skipping...")
-        pass
     return config_dir
 
 

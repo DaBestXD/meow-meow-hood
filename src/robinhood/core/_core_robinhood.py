@@ -1,3 +1,5 @@
+"""Shared implementation used by the sync and async public clients."""
+
 from __future__ import annotations
 
 import asyncio
@@ -35,15 +37,15 @@ from robinhood.browser_functions.token_functions import (
     _refresh_access_token,
     check_if_modified_date_within_range,
 )
-from robinhood.configure_logger import MISSING, configure_logger
 from robinhood.core._account_impl import AccountImpl
 from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
 from robinhood.core._market_data_impl import MarketDataImpl
 from robinhood.core._option_impl import OptionsImpl
 from robinhood.core._trading_impl import TradingImpl
 from robinhood.db_logic.option_cache import OptionCache
-from robinhood.set_up_script import set_up
-from robinhood.types import T
+from robinhood.utils.configure_logger import MISSING, configure_logger
+from robinhood.utils.set_up_script import set_up
+from robinhood.utils.types import T
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +71,10 @@ class _CoreRobinhood(
         access_token: str | None = None,
     ) -> None:
         """
-        Core implementation of the robinhood class for both sync
-        and async classes.
+        Initialize shared auth, cache, logging, and HTTP-client state.
+
+        This base class powers both `Robinhood` and `AsyncRobinhood`. Public
+        users normally instantiate one of those concrete clients.
         """
         self.event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         configure_logger(logging_level, log_handler)
@@ -147,4 +151,5 @@ class _CoreRobinhood(
             logger.warning("No db enabled! Nothing to execute!")
             return None
         else:
+            logger.debug("Exexuting %s with args %s", query, args)
             return self._db_cache.execute_query_with_args(query, args)

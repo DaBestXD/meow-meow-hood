@@ -1,3 +1,5 @@
+"""Market data implementation methods for stocks, indexes, and futures."""
+
 from __future__ import annotations
 
 import logging
@@ -30,11 +32,14 @@ from robinhood.constants import (
     SUCCESS,
 )
 from robinhood.core._typing_base import TypingBase
+from robinhood.utils._normalize_symbol import uppercase_input
 
 logger = logging.getLogger(__name__)
 
 
 class MarketDataImpl(TypingBase):
+    """Mixin containing stock, index, order book, and futures requests."""
+
     @overload
     async def _get_stock_info(self, symbols: str) -> StockInfo | None: ...
 
@@ -47,6 +52,7 @@ class MarketDataImpl(TypingBase):
         self, symbols: str | list[str]
     ) -> StockInfo | list[StockInfo] | None:
         """Return stock metadata for one symbol or a list of symbols."""
+        symbols = uppercase_input(symbols)
         _symbols = symbols
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
@@ -76,6 +82,8 @@ class MarketDataImpl(TypingBase):
         self,
         symbols: str | list[str],
     ) -> list[IndexInfo] | IndexInfo | None:
+        """Return index metadata for one symbol or a list of symbols."""
+        symbols = uppercase_input(symbols)
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
         params = {PARAM_SYMBOLS: symbols}
@@ -101,6 +109,8 @@ class MarketDataImpl(TypingBase):
     async def _get_index_quotes(
         self, symbols: str | list[str]
     ) -> list[IndexQuote] | IndexQuote | None:
+        """Returns IndexQuote classes for one symbol or a list of symbols"""
+        symbols = uppercase_input(symbols)
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
         params = {PARAM_SYMBOLS: symbols}
@@ -129,8 +139,9 @@ class MarketDataImpl(TypingBase):
     ) -> FullQuote | list[FullQuote] | None:
         """
         Returns a list of FullQuote dataclasses
-        Usage: stock = get_stock_quotes("SPY")
+        Ensure symbols are capitalized
         """
+        symbol = uppercase_input(symbol)
         symbol = [symbol] if isinstance(symbol, str) else symbol
         joined_symbol = ",".join(symbol)
         res_json = await self._async_http_client._get(
@@ -142,6 +153,7 @@ class MarketDataImpl(TypingBase):
         return return_val if len(return_val) > 1 else return_val[0]
 
     async def _get_orderbook(self, symbol: str) -> OrderBook | None:
+        symbol = uppercase_input(symbol)
         si = await self._get_stock_info(symbol)
         if not si:
             logger.warning("%s returned none", symbol)
@@ -168,6 +180,7 @@ class MarketDataImpl(TypingBase):
         Symbols should be as follows:
         /ES not specific future contracts like /ESM26,
         """
+        symbol = uppercase_input(symbol)
         futures_prods = await self._get_all_futures_products()
         if not futures_prods:
             # get_all_futures_products has a warning logger already
@@ -228,10 +241,6 @@ class MarketDataImpl(TypingBase):
     ) -> list[FuturesProduct] | None:
         """
         Return a list of all Futures Products
-        Runtime cache idk how this will impact memory usage but
-        I can't be assed to create a new table and entries, and
-        table prunning, etc...
-        Def a todo and move away from @cache deco.
         """
         res_json = await self._async_http_client._get(API_FUTURES_PRODUCTS)
         if not res_json:

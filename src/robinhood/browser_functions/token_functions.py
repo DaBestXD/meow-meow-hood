@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from typing_extensions import deprecated
 
 from robinhood.browser_functions.browser_token_parser import (
     CHROME_LINUX,
@@ -30,8 +31,11 @@ from robinhood.browser_functions.browser_token_parser import (
 logger = logging.getLogger(__name__)
 
 
+@deprecated("No need to test this")
 def test_ping(access_token: str, attempts: int = 3) -> bool:
-    """IDK why this exists can probably delete later"""
+    """
+    IDK why this exists can probably delete later
+    """
     test_link = "https://api.robinhood.com/accounts/"
     headers = {"authorization": f"{access_token}"}
     res = requests.get(test_link, headers=headers, timeout=5)

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from .api_dataclasses import OptionInstrument, OptionRequest
+from robinhood.api_dataclasses import OptionInstrument, OptionRequest
 
 
 def match_req_to_oi(
     option_request: OptionRequest, option_instrument: OptionInstrument
 ) -> bool:
+    """Return whether an option instrument satisfies an option request."""
     if (
         option_request.strike_price
         and option_request.strike_price != option_instrument.strike_price
@@ -30,6 +31,7 @@ def map_option_requests_to_ois(
     option_requests: list[OptionRequest],
     option_instruments: list[OptionInstrument],
 ) -> dict[OptionRequest, list[OptionInstrument]]:
+    """Group option instruments by the requests they match."""
     return {
         option_request: [
             option_instrument

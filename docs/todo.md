@@ -2,7 +2,7 @@
 
 ## Priority TODO
 
-- Add buying and selling positions for stocks(Options done, multi leg support included!)
+- Add better http error handling and add generic error messages to functions
 
 - Add ability to store equity information into db for long term storage
 

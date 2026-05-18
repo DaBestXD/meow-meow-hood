@@ -10,6 +10,7 @@ from robinhood.api_dataclasses import OptionChain, OptionRequest
 from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.constants import API_OPTIONS_GREEKS_DATA, PARAM_OPTION_IDS
 from tests.support import (
+    build_async_robinhood_client,
     build_option_chain_payload,
     build_option_greek_data,
     build_option_instrument,
@@ -35,9 +36,11 @@ class FakeCache:
 
 
 def build_async_client(*, db_cache: object | None = None) -> AsyncRobinhood:
-    client = AsyncRobinhood.__new__(AsyncRobinhood)
-    client._async_http_client = SimpleNamespace(_get=AsyncMock())
-    client._db_cache = db_cache
+    client = build_async_robinhood_client(
+        http_client=SimpleNamespace(_get=AsyncMock()),
+        db_cache=db_cache,
+    )
+    client.event_loop.close()
     return client
 
 
