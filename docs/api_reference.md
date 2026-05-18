@@ -89,8 +89,8 @@ Read methods generally return `None` when no usable data is returned. Option
 batch methods usually keep the input request as the dictionary key and use an
 empty list when no matching option data is found.
 
-HTTP `401` and `403` responses raise `RuntimeError`. HTTP `429` and `5xx`
-responses currently raise `NotImplementedError`. Trading helpers can raise
-package exceptions from `robinhood.errors` when an order cannot be validated
-locally.
+HTTP `401` and `403` responses raise `AuthenticationError`. HTTP `429` and
+`5xx` responses currently raise `NotImplementedError`. Trading helpers can
+raise package exceptions from `robinhood.errors` when an order cannot be
+validated locally.
 Better http error handling will be added.

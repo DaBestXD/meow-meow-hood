@@ -40,9 +40,11 @@ from pathlib import Path
 
 from robinhood import Robinhood
 
+# Use a token directly instead of extracting one from a browser profile.
 with Robinhood(extract_token=False, access_token="...") as rh:
     quote = rh.get_stock_quotes("SPY")
 
+# Store config files outside the current working directory.
 with Robinhood(config_path=Path.home() / ".config") as rh:
     quote = rh.get_stock_quotes("SPY")
 ```
@@ -87,9 +89,6 @@ Broad option requests are the most cache-friendly:
 - `OptionRequest(symbol="SPY")`
 - `OptionRequest(symbol="SPY", exp_date="2026-04-17")`
 
-Requests narrowed by `option_type` or `strike_price` can reuse cached
-instrument ids, but they do not create their own sync rows yet.
-
 ```python
 from robinhood import OptionRequest, Robinhood
 
@@ -103,6 +102,10 @@ with Robinhood(enable_cache=True) as rh:
     print(len(greeks_by_request[request]))
 ```
 
+See [Database Schema](https://github.com/DaBestXD/meow-meow-hood/blob/main/docs/db_schema.md)
+and [Design Notes](https://github.com/DaBestXD/meow-meow-hood/blob/main/docs/design_notes.md)
+for cache internals.
+
 ## Return Values And Errors
 
 Many read methods return `None` when Robinhood returns no usable data. Batch
@@ -111,7 +114,7 @@ empty list for requests that could not be resolved.
 
 HTTP behavior to expect:
 
-- `401` and `403` raise `RuntimeError` with an invalid-token message.
+- `401` and `403` raise `AuthenticationError` with an invalid-token message.
 - `429` and `5xx` currently raise `NotImplementedError`.
 - Other unexpected statuses are logged by the HTTP layer.
 
@@ -119,25 +122,24 @@ Trading helpers can raise package errors such as `MalformedOrderError`,
 `InstruemtNotFoundError`, or `AccountIdNotFoundError` when an order cannot be
 validated locally before submission.
 
-## More Documentation
+## More Examples
 
-- Examples: `docs/examples.md`
-- API reference: `docs/api_reference.md`
-- Cache schema: `docs/db_schema.md`
-- Design notes: `docs/design_notes.md`
-- TODO log: `docs/todo.md`
-
-## Development
+Beginner and workflow examples live in
+[docs/examples.md](https://github.com/DaBestXD/meow-meow-hood/blob/main/docs/examples.md).
 
 ```bash
-python -m unittest discover -s tests
-ruff check .
-ruff format --check .
-pyright
-python -m benchmarks.benchmark_api_requests
+uv run python docs/examples/sample_option_chain.py
+# or
+python docs/examples/sample_option_chain.py
 ```
 
-## License And Versioning
+## API Reference
 
-The project is MIT licensed. The current package version is declared in
-`pyproject.toml`.
+See [docs/api_reference.md](https://github.com/DaBestXD/meow-meow-hood/blob/main/docs/api_reference.md)
+for a compact overview of the public clients, dataclasses, return types, and
+setup parameters.
+
+## TODO Log
+
+See [docs/todo.md](https://github.com/DaBestXD/meow-meow-hood/blob/main/docs/todo.md)
+for planned features.

@@ -115,7 +115,7 @@ empty list for requests that could not be resolved.
 
 HTTP behavior to expect:
 
-- `401` and `403` raise `RuntimeError` with an invalid-token message.
+- `401` and `403` raise `AuthenticationError` with an invalid-token message.
 - `429` and `5xx` currently raise `NotImplementedError`.
 - Other unexpected statuses are logged by the HTTP layer.
 
