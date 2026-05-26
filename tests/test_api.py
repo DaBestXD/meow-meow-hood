@@ -4,16 +4,6 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from robinhood.api_dataclasses import (
-    FullQuote,
-    Future,
-    IndexQuote,
-    OptionChain,
-    OptionPosition,
-    OptionRequest,
-    StockInfo,
-    StockPosition,
-)
 from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.browser_functions.browser_token_parser import Chrome
 from robinhood.constants import (
@@ -23,6 +13,7 @@ from robinhood.constants import (
     API_OPTION_CHAINS,
     API_POSITIONS_OPTIONS,
     API_QUOTES,
+    API_WATCHLIST,
     API_WATCHLIST_DEFAULT,
     API_WATCHLIST_ITEMS,
     PARAM_ACCOUNT_NUMBER,
@@ -32,6 +23,16 @@ from robinhood.constants import (
     PARAM_NON_ZERO,
     PARAM_SYMBOLS,
 )
+from robinhood.dataclasses.api_dataclasses import (
+    FullQuote,
+    IndexQuote,
+    OptionChain,
+    OptionPosition,
+    OptionRequest,
+    StockInfo,
+    StockPosition,
+)
+from robinhood.dataclasses.watchlist_classes import Future
 from robinhood.sync_robinhood_class import Robinhood
 from tests.support import (
     build_async_robinhood_client,
@@ -72,6 +73,7 @@ def build_async_api_client(*, db_cache: object | None = None) -> AsyncRobinhood:
         http_client=SimpleNamespace(
             _get=AsyncMock(),
             _post=AsyncMock(),
+            _delete=AsyncMock(),
             close=AsyncMock(),
         ),
         db_cache=db_cache,
@@ -224,6 +226,7 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         client = self._track_loop(build_async_api_client())
+        future_id = "00000000-0000-4000-8000-000000000001"
         quote_payload = {
             "ask_price": "1.0",
             "ask_size": "1",
@@ -235,7 +238,7 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
             "last_trade_size": "3",
             "last_trade_venue_timestamp": "2026-04-01T09:30:00Z",
             "symbol": "/ESM26",
-            "instrument_id": "future-id",
+            "instrument_id": future_id,
             "state": "active",
             "updated_at": "2026-04-01T09:30:00Z",
             "out_of_band": False,
@@ -244,21 +247,22 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
             {"data": [{"status": "SUCCESS", "data": quote_payload}]}
         ]
 
-        result = await client.get_future_quote("future-id")
+        result = await client.get_future_quote(future_id)
 
-        self.assertEqual("future-id", result.instrument_id)
+        self.assertEqual(future_id, result.instrument_id)
         client._async_http_client._get.assert_awaited_once_with(
             endpoint=API_FUTURES_QUOTES,
-            params={PARAM_ID: "future-id"},
+            params={PARAM_ID: future_id},
         )
 
     async def test_get_future_quote_raises_for_more_than_twenty_ids(
         self,
     ) -> None:
         client = self._track_loop(build_async_api_client())
+        ids = [f"00000000-0000-4000-8000-{n:012d}" for n in range(21)]
 
         with self.assertRaises(ValueError):
-            await client.get_future_quote([f"id-{n}" for n in range(21)])
+            await client.get_future_quote(ids)
 
     async def test_get_account_option_positions_parses_payloads(self) -> None:
         client = self._track_loop(build_async_api_client())
@@ -343,6 +347,127 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
             client._async_http_client._get.call_args_list,
         )
 
+    async def test_create_watchlist_posts_sample_payload(self) -> None:
+        client = self._track_loop(build_async_api_client())
+        client._async_http_client._post.return_value = {"id": "watchlist-id"}
+
+        result = await client.create_watchlist("blahblah")
+
+        self.assertEqual("blahblah", result.name)
+        self.assertEqual("watchlist-id", result.id)
+        self.assertEqual([], result.items)
+        client._async_http_client._post.assert_awaited_once_with(
+            endpoint=API_WATCHLIST,
+            json={
+                "display_name": "blahblah",
+                "icon_emoji": "🐱",
+                "list_position": 0,
+            },
+        )
+
+    async def test_delete_watchlist_resolves_id_and_deletes_by_endpoint(
+        self,
+    ) -> None:
+        client = self._track_loop(build_async_api_client())
+        client._async_http_client._get.side_effect = [
+            [
+                build_watchlist_payload(
+                    id="watchlist-id",
+                    display_name="Default",
+                )
+            ],
+            [],
+        ]
+
+        await client.delete_watchlist("Default")
+
+        client._async_http_client._delete.assert_awaited_once_with(
+            endpoint=API_WATCHLIST + "watchlist-id/",
+        )
+
+    async def test_delete_watchlist_skips_delete_when_missing(self) -> None:
+        client = self._track_loop(build_async_api_client())
+        client._async_http_client._get.return_value = [
+            build_watchlist_payload(
+                id="watchlist-id",
+                display_name="Default",
+            )
+        ]
+
+        await client.delete_watchlist("Missing")
+
+        client._async_http_client._delete.assert_not_awaited()
+
+    async def test_add_item_to_watchlist_resolves_instrument_and_list(
+        self,
+    ) -> None:
+        client = self._track_loop(build_async_api_client())
+        quote = FullQuote.from_json(
+            build_full_quote_payload(
+                instrument_id="instrument-id",
+                symbol="SPY",
+            )
+        )
+        client._get_stock_quotes = AsyncMock(return_value=quote)
+        client._get_index_quotes = AsyncMock(return_value=None)
+        client._get_future_quote = AsyncMock(return_value=None)
+        client._get_currency_quote = AsyncMock(return_value=None)
+        client._async_http_client._get.side_effect = [
+            [
+                build_watchlist_payload(
+                    id="watchlist-id",
+                    display_name="Default",
+                )
+            ],
+            [],
+        ]
+        client._async_http_client._post.return_value = {
+            "id": "watchlist-item-id"
+        }
+
+        result = await client.add_item_to_watchlist("SPY", "Default")
+
+        self.assertEqual({"id": "watchlist-item-id"}, result)
+        client._get_stock_quotes.assert_awaited_once_with("SPY")
+        client._async_http_client._post.assert_awaited_once_with(
+            endpoint=API_WATCHLIST_ITEMS,
+            json={
+                "watchlist-id": [
+                    {
+                        "object_id": "instrument-id",
+                        "object_type": "instrument",
+                        "operation": "create",
+                    }
+                ],
+            },
+        )
+
+    async def test_add_item_to_watchlist_returns_none_for_missing_watchlist(
+        self,
+    ) -> None:
+        client = self._track_loop(build_async_api_client())
+        quote = FullQuote.from_json(
+            build_full_quote_payload(
+                instrument_id="instrument-id",
+                symbol="SPY",
+            )
+        )
+        client._get_stock_quotes = AsyncMock(return_value=quote)
+        client._get_index_quotes = AsyncMock(return_value=None)
+        client._get_future_quote = AsyncMock(return_value=None)
+        client._get_currency_quote = AsyncMock(return_value=None)
+        client._async_http_client._get.return_value = [
+            build_watchlist_payload(
+                id="watchlist-id",
+                display_name="Default",
+            )
+        ]
+
+        result = await client.add_item_to_watchlist("SPY", "Missing")
+
+        self.assertIsNone(result)
+        client._async_http_client._post.assert_not_awaited()
+
 
 class TestSyncRobinhoodAPI(unittest.TestCase):
     def tearDown(self) -> None:
@@ -387,6 +512,39 @@ class TestSyncRobinhoodAPI(unittest.TestCase):
 
         self.assertEqual(expected, result)
         client._get_account_stock_positions.assert_awaited_once_with()
+
+    def test_create_watchlist_returns_private_result(self) -> None:
+        client = self.make_client()
+        client._create_watchlist = AsyncMock(return_value={"id": "list-id"})
+
+        result = client.create_watchlist(
+            "Temp",
+            icon_emoji="*",
+            list_position=2,
+        )
+
+        self.assertEqual({"id": "list-id"}, result)
+        client._create_watchlist.assert_awaited_once_with("Temp", "*", 2)
+
+    def test_delete_watchlist_returns_private_result(self) -> None:
+        client = self.make_client()
+        client._delete_watchlist = AsyncMock(return_value=None)
+
+        result = client.delete_watchlist("Temp")
+
+        self.assertIsNone(result)
+        client._delete_watchlist.assert_awaited_once_with("Temp")
+
+    def test_add_item_to_watchlist_returns_private_result(self) -> None:
+        client = self.make_client()
+        client._add_item_to_watchlist = AsyncMock(
+            return_value={"id": "item-id"}
+        )
+
+        result = client.add_item_to_watchlist("SPY", "Temp")
+
+        self.assertEqual({"id": "item-id"}, result)
+        client._add_item_to_watchlist.assert_awaited_once_with("SPY", "Temp")
 
     @patch("robinhood.core._core_robinhood.auto_open_browser")
     @patch("robinhood.core._core_robinhood.check_if_modified_date_within_range")

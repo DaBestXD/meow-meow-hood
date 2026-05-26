@@ -1,6 +1,6 @@
 import unittest
 
-from robinhood.api_dataclasses import OptionRequest
+from robinhood.dataclasses.api_dataclasses import OptionRequest
 from robinhood.utils.option_matching import (
     map_option_requests_to_ois,
     match_req_to_oi,

@@ -6,7 +6,10 @@ import json
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
-from robinhood.api_dataclasses import OptionGreekData, OptionInstrument
+from robinhood.dataclasses.api_dataclasses import (
+    OptionGreekData,
+    OptionInstrument,
+)
 
 if TYPE_CHECKING:
     from robinhood.async_robinhood_class import AsyncRobinhood

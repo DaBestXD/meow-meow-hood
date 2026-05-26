@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
-from robinhood.api_dataclasses import OptionRequest
+from robinhood.dataclasses.api_dataclasses import OptionRequest
 from robinhood.db_logic.option_cache import OptionCache
 from tests.support import build_option_instrument
 

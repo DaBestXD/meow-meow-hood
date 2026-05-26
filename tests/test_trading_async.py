@@ -4,15 +4,15 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from robinhood.api_dataclasses import (
+from robinhood.async_robinhood_class import AsyncRobinhood
+from robinhood.constants import API_OPTION_ORDER, API_STOCK_ORDER, BASE_API_LINK
+from robinhood.dataclasses.api_dataclasses import (
     FullQuote,
     OptionOrderResponse,
     OptionRequest,
     StockInfo,
     StockOrderResponse,
 )
-from robinhood.async_robinhood_class import AsyncRobinhood
-from robinhood.constants import API_OPTION_ORDER, API_STOCK_ORDER, BASE_API_LINK
 from robinhood.errors import (
     AccountIdNotFoundError,
     InstruemtNotFoundError,

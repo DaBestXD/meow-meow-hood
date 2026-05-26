@@ -1,7 +1,7 @@
 import unittest
 from dataclasses import asdict
 
-from robinhood.api_dataclasses import (
+from robinhood.dataclasses.api_dataclasses import (
     FullQuote,
     IndexInfo,
     IndexQuote,
@@ -116,6 +116,7 @@ class TestApiDataclasses(unittest.TestCase):
         self.assertEqual(0.92278, position.quantity)
         self.assertEqual("long", position.type)
         self.assertEqual(27.83, position.clearing_average_cost)
+        self.assertAlmostEqual(25.68, position.total_notional, places=2)
         self.assertEqual(
             "91f7ea28-e413-4ca4-b9fa-91f5822f8b8d",
             position.instrument_id,

@@ -17,9 +17,11 @@ class FakeResponse:
         *,
         payload: dict | None = None,
         error: Exception | None = None,
+        status: int = 200,
     ) -> None:
         self.payload = payload if payload is not None else {}
         self.error = error
+        self.status = status
 
     async def __aenter__(self) -> FakeResponse:
         return self
@@ -41,11 +43,14 @@ class FakeSession:
         *,
         get_responses: list[FakeResponse] | None = None,
         post_responses: list[FakeResponse] | None = None,
+        delete_responses: list[FakeResponse] | None = None,
     ) -> None:
         self._get_responses = list(get_responses or [])
         self._post_responses = list(post_responses or [])
+        self._delete_responses = list(delete_responses or [])
         self.get_calls: list[dict] = []
         self.post_calls: list[dict] = []
+        self.delete_calls: list[dict] = []
         self.close = AsyncMock()
 
     def get(self, **kwargs) -> FakeResponse:
@@ -55,6 +60,10 @@ class FakeSession:
     def post(self, **kwargs) -> FakeResponse:
         self.post_calls.append(kwargs)
         return self._post_responses.pop(0)
+
+    def delete(self, **kwargs) -> FakeResponse:
+        self.delete_calls.append(kwargs)
+        return self._delete_responses.pop(0)
 
 
 class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
@@ -226,6 +235,69 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result)
         client._error_status_code_handler.assert_called_once_with(
             "/orders/",
+            400,
+        )
+
+    async def test_delete_returns_json_from_successful_response(self) -> None:
+        session = FakeSession(
+            delete_responses=[FakeResponse(payload={"deleted": True})]
+        )
+        client = build_http_client(session=session)
+        client.create_client_session = AsyncMock(return_value=session)
+
+        result = await client._delete(
+            endpoint="/screeners/watchlist-id",
+            base_api_link=BASE_API_BONFIRE_LINK,
+        )
+
+        self.assertEqual({"deleted": True}, result)
+        self.assertEqual(
+            [
+                {
+                    "url": BASE_API_BONFIRE_LINK + "/screeners/watchlist-id",
+                    "data": None,
+                    "json": None,
+                }
+            ],
+            session.delete_calls,
+        )
+
+    async def test_delete_returns_none_for_empty_success_response(self) -> None:
+        session = FakeSession(
+            delete_responses=[FakeResponse(payload={}, status=204)]
+        )
+        client = build_http_client(session=session)
+        client.create_client_session = AsyncMock(return_value=session)
+
+        result = await client._delete(endpoint="/watchlists/item-id/")
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            [
+                {
+                    "url": BASE_API_LINK + "/watchlists/item-id/",
+                    "data": None,
+                    "json": None,
+                }
+            ],
+            session.delete_calls,
+        )
+
+    async def test_delete_calls_error_handler_on_response_error(self) -> None:
+        error = aiohttp.ClientResponseError(None, (), status=400)
+        session = FakeSession(delete_responses=[FakeResponse(error=error)])
+        client = build_http_client(session=session)
+        client.create_client_session = AsyncMock(return_value=session)
+        client._error_status_code_handler = Mock()
+
+        result = await client._delete(
+            endpoint="/screeners/watchlist-id",
+            base_api_link=BASE_API_BONFIRE_LINK,
+        )
+
+        self.assertIsNone(result)
+        client._error_status_code_handler.assert_called_once_with(
+            "/screeners/watchlist-id",
             400,
         )
 
