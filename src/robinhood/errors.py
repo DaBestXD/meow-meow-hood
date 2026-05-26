@@ -6,6 +6,26 @@ class OrderFailedError(RobinhoodError):
     """Raised when an order submission fails."""
 
 
+class InvalidTypeError(RobinhoodError):
+    """Raised when an robinhood object id returns none"""
+
+
+class NoFutureProductsReturnedError(RobinhoodError):
+    """Raised when no futures products are returned"""
+
+
+class FailedToCreateWatchlistError(RobinhoodError):
+    """When a watchlist fails to be created"""
+
+
+class FailedToDeleteWatchlistError(RobinhoodError):
+    """When a watchlist fails to be deleted"""
+
+
+class FailedToModifyWatchlistError(RobinhoodError):
+    """When a watchlist failes to be added/deleted"""
+
+
 class InstruemtNotFoundError(RobinhoodError):
     """Raised when a requested instrument cannot be found."""
 

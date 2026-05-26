@@ -37,6 +37,8 @@ class RobinhoodAsyncHTTPClient:
         added.
         Other statuses are logged and return `None`.
         """
+        if status_code == 404:
+            return None
         if status_code >= 500:
             # TODO: add retry logic for 5XX errors
             raise NotImplementedError(f"{endpoint}, {status_code}")
@@ -91,28 +93,63 @@ class RobinhoodAsyncHTTPClient:
         params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         session = await self.create_client_session()
-        async with session.get(
-            url=base_api_link + endpoint,
-            params=params,
-        ) as res:
-            res.raise_for_status()
-            res_json = await res.json()
-            next_link: str | None = res_json.get("next")
-            if not next_link:
-                return res_json.get(RESULTS, [res_json])
-            return await self._page_get(
-                next_link, results=res_json.get(RESULTS, [])
-            )
+        try:
+            async with session.get(
+                url=base_api_link + endpoint,
+                params=params,
+            ) as res:
+                res.raise_for_status()
+                res_json = await res.json()
+                next_link: str | None = res_json.get("next")
+                if not next_link:
+                    return res_json.get(RESULTS, [res_json])
+                return await self._page_get(
+                    next_link, results=res_json.get(RESULTS, [])
+                )
+        except aiohttp.ClientResponseError as e:
+            if e.status == 404:
+                return []
 
     async def _download(
         self, endpoint: str, base_api_link: str = BASE_API_LINK
-    ):
+    ) -> bytes:
         session = await self.create_client_session()
         async with session.get(
             url=base_api_link + endpoint,
         ) as res:
             res.raise_for_status()
             return await res.read()
+
+    async def _delete(
+        self,
+        endpoint: str,
+        base_api_link: str = BASE_API_LINK,
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        session = await self.create_client_session()
+        try:
+            async with session.delete(
+                url=base_api_link + endpoint,
+                data=data,
+                json=json,
+            ) as res:
+                logger.debug(
+                    "DELETE request: %s, data: %s json: %s",
+                    endpoint,
+                    data if data else "none",
+                    json if json else "none",
+                )
+                res.raise_for_status()
+                if getattr(res, "status", None) == 204:
+                    return None
+                try:
+                    return await res.json()
+                except aiohttp.ContentTypeError:
+                    return None
+        except aiohttp.ClientResponseError as e:
+            self._error_status_code_handler(endpoint, e.status)
+        return None
 
     async def _post(
         self,

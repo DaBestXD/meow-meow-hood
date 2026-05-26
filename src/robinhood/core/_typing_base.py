@@ -1,16 +1,18 @@
 """Protocol-like base used for typing shared implementation mixins."""
 
 from typing import overload
+from uuid import UUID
 
-from robinhood.api_dataclasses import (
+from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
+from robinhood.dataclasses.api_dataclasses import (
     FullQuote,
     OptionChain,
     OptionInstrument,
     OptionRequest,
     StockInfo,
 )
-from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
 from robinhood.db_logic.option_cache import OptionCache
+from robinhood.utils.types import StrWatchListItem
 
 
 class TypingBase:
@@ -65,3 +67,13 @@ class TypingBase:
     async def _get_stock_quotes(
         self, symbol: list[str] | str
     ) -> FullQuote | list[FullQuote] | None: ...
+
+    async def _check_input_type(
+        self, item: str | UUID
+    ) -> (
+        tuple[
+            StrWatchListItem,
+            str,
+        ]
+        | None
+    ): ...

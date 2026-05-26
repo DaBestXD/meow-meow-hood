@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from robinhood.api_dataclasses import (
+from robinhood.dataclasses.api_dataclasses import (
     OptionChain,
     OptionInstrument,
     OptionRequest,

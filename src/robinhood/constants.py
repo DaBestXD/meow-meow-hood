@@ -14,7 +14,9 @@ NEXT = "next"
 ACCOUNT_NUMBER = "account_number"
 BASE_API_LINK = "https://api.robinhood.com"
 BASE_API_BONFIRE_LINK = "https://bonfire.robinhood.com"
+BASE_API_NUMMUS_LINK = "https://nummus.robinhood.com"
 API_ACCOUNT = "/accounts/"
+API_CURRENCY_QUOTES = "/marketdata/forex/quotes/"
 API_GET_WSS_URL = "/marketdata/token/v1/"
 API_FUTURES_PRODUCTS = "/arsenal/v1/futures/products/"
 API_FUTURES_CONTRACTS = "/arsenal/v1/futures/contracts/"
@@ -34,11 +36,15 @@ API_POSITIONS_NON_OPTIONS = "/positions/"
 API_POSITIONS_OPTIONS = "/options/positions/"
 API_QUOTES = "/quotes/"
 API_STOCK_ORDER = "/orders/"
-API_WATCHLIST = "/discovery/lists/"
+API_STOCK_QUOTE = "/marketdata/quotes/"
+API_WATCHLIST = "/discovery/lists/"  # Supports Get, Post, Delete, Patch
+API_WATCHLIST_DELETE = API_WATCHLIST
 API_WATCHLIST_DEFAULT = "/discovery/lists/default/"
 API_WATCHLIST_ITEMS = "/discovery/lists/items/"
 # Bonfire endpoints
 API_UNIFIED_TRANSFERS = "/paymenthub/unified_transfers/"
+# Nummus endpoints
+API_CURRENCY_PAIR = "/currency_pairs/"
 # Params
 PARAM_ACCOUNT_NUMBER = "account_number"
 PARAM_CHAIN_ID = "chain_id"
