@@ -8,12 +8,12 @@ from robinhood.core._core_robinhood import _CoreRobinhood
 from robinhood.dataclasses.api_dataclasses import (
     AchTransfer,
     CurrencyQuote,
-    FullQuote,
     FuturesContract,
     FuturesProduct,
     FuturesQuote,
     IndexInfo,
     IndexQuote,
+    InstrumentQuote,
     OptionChain,
     OptionGreekData,
     OptionOrderHistory,
@@ -100,15 +100,17 @@ class AsyncRobinhood(_CoreRobinhood):
         return await self._get_index_quotes(symbols)
 
     @overload
-    async def get_stock_quotes(self, symbols: str) -> FullQuote | None: ...
+    async def get_stock_quotes(
+        self, symbols: str
+    ) -> InstrumentQuote | None: ...
     @overload
     async def get_stock_quotes(
         self, symbols: list[str]
-    ) -> list[FullQuote] | None: ...
+    ) -> list[InstrumentQuote] | None: ...
 
     async def get_stock_quotes(
         self, symbols: str | list[str]
-    ) -> FullQuote | list[FullQuote] | None:
+    ) -> InstrumentQuote | list[InstrumentQuote] | None:
         """Return stock quote data for one symbol or a list of symbols."""
         return await self._get_stock_quotes(symbols)
 

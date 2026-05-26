@@ -76,7 +76,7 @@ with Robinhood() as rh:
         print(greek.symbol, greek.delta, greek.mark_price)
 ```
 
-JSON responses are normalized into dataclasses such as `FullQuote`,
+JSON responses are normalized into dataclasses such as `InstrumentQuote`,
 `OptionChain`, `OptionGreekData`, `StockPosition`, and `WatchList`.
 
 ## Local Caching

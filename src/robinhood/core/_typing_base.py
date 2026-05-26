@@ -5,7 +5,7 @@ from uuid import UUID
 
 from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
 from robinhood.dataclasses.api_dataclasses import (
-    FullQuote,
+    InstrumentQuote,
     OptionChain,
     OptionInstrument,
     OptionRequest,
@@ -57,16 +57,18 @@ class TypingBase:
     ) -> StockInfo | list[StockInfo] | None: ...
 
     @overload
-    async def _get_stock_quotes(self, symbol: str) -> FullQuote | None: ...
+    async def _get_stock_quotes(
+        self, symbol: str
+    ) -> InstrumentQuote | None: ...
 
     @overload
     async def _get_stock_quotes(
         self, symbol: list[str]
-    ) -> list[FullQuote] | None: ...
+    ) -> list[InstrumentQuote] | None: ...
 
     async def _get_stock_quotes(
         self, symbol: list[str] | str
-    ) -> FullQuote | list[FullQuote] | None: ...
+    ) -> InstrumentQuote | list[InstrumentQuote] | None: ...
 
     async def _check_input_type(
         self, item: str | UUID

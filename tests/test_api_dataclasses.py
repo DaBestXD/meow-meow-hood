@@ -2,9 +2,9 @@ import unittest
 from dataclasses import asdict
 
 from robinhood.dataclasses.api_dataclasses import (
-    FullQuote,
     IndexInfo,
     IndexQuote,
+    InstrumentQuote,
     MoneyAmount,
     OptionGreekData,
     OptionOrderHistory,
@@ -19,6 +19,7 @@ from robinhood.dataclasses.api_dataclasses import (
 from tests.support import (
     build_index_info_payload,
     build_index_quote_payload,
+    build_instrument_quote_payload,
     build_option_greek_data,
     build_option_order_payload,
     build_option_position_payload,
@@ -77,24 +78,12 @@ class TestApiDataclasses(unittest.TestCase):
         self.assertEqual(0.25, stock_info.day_trade_ratio)
         self.assertEqual(0.0, stock_info.min_tick_size)
 
-    def test_full_quote_from_json_coerces_ints_and_floats(self):
-        payload = {
-            "ask_price": "10.5",
-            "ask_size": "11",
-            "bid_price": "10.4",
-            "bid_size": "9",
-            "last_trade_price": None,
-            "last_extended_hours_trade_price": "0",
-            "last_non_reg_trade_price": "10.3",
-            "previous_close": "10.0",
-            "adjusted_previous_close": "10.1",
-            "symbol": "SPY",
-            "updated_at": "2026-04-01T09:30:00Z",
-            "instrument_id": "instrument-id",
-            "state": "active",
-        }
+    def test_instrument_quote_from_json_coerces_ints_and_floats(self):
+        payload = build_instrument_quote_payload()
+        payload["last_trade_price"] = None
+        payload["last_extended_hours_trade_price"] = "0"
 
-        quote = FullQuote.from_json(payload)
+        quote = InstrumentQuote.from_json(payload)
 
         self.assertEqual(10.5, quote.ask_price)
         self.assertEqual(11, quote.ask_size)

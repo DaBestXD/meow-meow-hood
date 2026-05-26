@@ -84,7 +84,7 @@ class OptionRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class FullQuote(ApiPayloadMixin):
+class InstrumentQuote(ApiPayloadMixin):
     """
     Useful fields:
         ask/bid price, ask/bid size

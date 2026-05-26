@@ -6,6 +6,10 @@ class OrderFailedError(RobinhoodError):
     """Raised when an order submission fails."""
 
 
+class EndpointNotFoundError(RobinhoodError):
+    """Raise when an endpoint returns 404"""
+
+
 class InvalidTypeError(RobinhoodError):
     """Raised when an robinhood object id returns none"""
 

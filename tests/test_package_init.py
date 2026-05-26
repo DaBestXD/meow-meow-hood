@@ -14,7 +14,7 @@ class TestPackageInit(unittest.TestCase):
             "BidAsk",
             "CurrencyPair",
             "CurrencyQuote",
-            "FullQuote",
+            "InstrumentQuote",
             "Future",
             "FuturesContract",
             "FuturesProduct",

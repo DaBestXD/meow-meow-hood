@@ -135,7 +135,7 @@ def build_option_chain_payload(
     }
 
 
-def build_full_quote_payload(
+def build_instrument_quote_payload(
     *,
     symbol: str = "SPY",
     instrument_id: str = "instrument-id",

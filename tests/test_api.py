@@ -24,8 +24,8 @@ from robinhood.constants import (
     PARAM_SYMBOLS,
 )
 from robinhood.dataclasses.api_dataclasses import (
-    FullQuote,
     IndexQuote,
+    InstrumentQuote,
     OptionChain,
     OptionPosition,
     OptionRequest,
@@ -36,8 +36,8 @@ from robinhood.dataclasses.watchlist_classes import Future
 from robinhood.sync_robinhood_class import Robinhood
 from tests.support import (
     build_async_robinhood_client,
-    build_full_quote_payload,
     build_index_quote_payload,
+    build_instrument_quote_payload,
     build_option_chain_payload,
     build_option_position_payload,
     build_robinhood_client,
@@ -93,12 +93,12 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_stock_quotes_normalizes_single_symbol(self) -> None:
         client = self._track_loop(build_async_api_client())
-        quote_payload = build_full_quote_payload(symbol="SPY")
+        quote_payload = build_instrument_quote_payload(symbol="SPY")
         client._async_http_client._get.return_value = [quote_payload]
 
         result = await client.get_stock_quotes("spy")
 
-        self.assertEqual(FullQuote.from_json(quote_payload), result)
+        self.assertEqual(InstrumentQuote.from_json(quote_payload), result)
         client._async_http_client._get.assert_awaited_once_with(
             endpoint=API_QUOTES,
             params={PARAM_SYMBOLS: "SPY"},
@@ -402,8 +402,8 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         client = self._track_loop(build_async_api_client())
-        quote = FullQuote.from_json(
-            build_full_quote_payload(
+        quote = InstrumentQuote.from_json(
+            build_instrument_quote_payload(
                 instrument_id="instrument-id",
                 symbol="SPY",
             )
@@ -446,8 +446,8 @@ class TestAsyncRobinhoodAPI(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         client = self._track_loop(build_async_api_client())
-        quote = FullQuote.from_json(
-            build_full_quote_payload(
+        quote = InstrumentQuote.from_json(
+            build_instrument_quote_payload(
                 instrument_id="instrument-id",
                 symbol="SPY",
             )

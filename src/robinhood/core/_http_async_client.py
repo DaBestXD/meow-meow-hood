@@ -6,7 +6,7 @@ from typing import Any
 import aiohttp
 
 from robinhood.constants import BASE_API_LINK, RESULTS
-from robinhood.errors import AuthenticationError
+from robinhood.errors import AuthenticationError, EndpointNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +26,7 @@ class RobinhoodAsyncHTTPClient:
         await self.session.close()
 
     # This should be blocking maybe?
-    def _error_status_code_handler(
-        self, endpoint: str, status_code: int
-    ) -> None:
+    def _error_status_code_handler(self, endpoint: str, status_code: int):
         """
         Raise the current package-level error for HTTP response statuses.
 
@@ -37,11 +35,11 @@ class RobinhoodAsyncHTTPClient:
         added.
         Other statuses are logged and return `None`.
         """
-        if status_code == 404:
-            return None
         if status_code >= 500:
             # TODO: add retry logic for 5XX errors
             raise NotImplementedError(f"{endpoint}, {status_code}")
+        if status_code == 404:
+            raise EndpointNotFoundError(f"{endpoint}, {status_code}")
         if status_code == 429:
             logger.warning("429 error returned, you are being rate limited.")
             # TODO: change this to a hardblock maybe sleep for a minute?
@@ -53,7 +51,9 @@ class RobinhoodAsyncHTTPClient:
             )
         else:
             logger.warning("%s returned: %d", endpoint, status_code)
-        return None
+        raise RuntimeError(
+            f"{endpoint} returned unexpected error {status_code}"
+        )
 
     async def create_client_session(self) -> aiohttp.ClientSession:
         """Create or return the cached aiohttp client session."""
@@ -107,8 +107,7 @@ class RobinhoodAsyncHTTPClient:
                     next_link, results=res_json.get(RESULTS, [])
                 )
         except aiohttp.ClientResponseError as e:
-            if e.status == 404:
-                return []
+            self._error_status_code_handler(endpoint, e.status)
 
     async def _download(
         self, endpoint: str, base_api_link: str = BASE_API_LINK

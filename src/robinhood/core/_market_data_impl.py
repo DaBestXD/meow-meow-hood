@@ -28,12 +28,12 @@ from robinhood.constants import (
 from robinhood.core._typing_base import TypingBase
 from robinhood.dataclasses.api_dataclasses import (
     CurrencyQuote,
-    FullQuote,
     FuturesContract,
     FuturesProduct,
     FuturesQuote,
     IndexInfo,
     IndexQuote,
+    InstrumentQuote,
     OptionGreekData,
     OrderBook,
     StockInfo,
@@ -144,18 +144,20 @@ class MarketDataImpl(TypingBase):
         return index_quotes if len(index_quotes) > 1 else index_quotes[0]
 
     @overload
-    async def _get_stock_quotes(self, symbol: str) -> FullQuote | None: ...
+    async def _get_stock_quotes(
+        self, symbol: str
+    ) -> InstrumentQuote | None: ...
 
     @overload
     async def _get_stock_quotes(
         self, symbol: list[str]
-    ) -> list[FullQuote] | None: ...
+    ) -> list[InstrumentQuote] | None: ...
 
     async def _get_stock_quotes(
         self, symbol: list[str] | str
-    ) -> FullQuote | list[FullQuote] | None:
+    ) -> InstrumentQuote | list[InstrumentQuote] | None:
         """
-        Returns a list of FullQuote dataclasses
+        Returns a list of InstrumentQuote dataclasses
         Ensure symbols are capitalized
         """
         symbol = uppercase_input(symbol)
@@ -164,7 +166,7 @@ class MarketDataImpl(TypingBase):
         res_json = await self._async_http_client._get(
             endpoint=API_QUOTES, params={PARAM_SYMBOLS: joined_symbol}
         )
-        return_val = [FullQuote.from_json(r) for r in res_json if r]
+        return_val = [InstrumentQuote.from_json(r) for r in res_json if r]
         if not res_json:
             return None
         return return_val if len(return_val) > 1 else return_val[0]
@@ -391,7 +393,7 @@ class MarketDataImpl(TypingBase):
                 raise InvalidTypeError(f"{item} is not valid type")
             items = [r for r in results if r]
             final_item = items[0]
-            if isinstance(final_item, FullQuote):
+            if isinstance(final_item, InstrumentQuote):
                 return "instrument", final_item.instrument_id
             if isinstance(final_item, IndexQuote):
                 return "index", final_item.instrument_id
