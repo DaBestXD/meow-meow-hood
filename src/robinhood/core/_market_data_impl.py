@@ -394,15 +394,37 @@ class MarketDataImpl(TypingBase):
             items = [r for r in results if r]
             final_item = items[0]
             if isinstance(final_item, InstrumentQuote):
+                if self._db_cache:
+                    self._db_cache.insert_object_info(
+                        final_item.instrument_id,
+                        "instrument",
+                        final_item.symbol,
+                    )
                 return "instrument", final_item.instrument_id
             if isinstance(final_item, IndexQuote):
+                if self._db_cache:
+                    self._db_cache.insert_object_info(
+                        final_item.instrument_id,
+                        "index",
+                        final_item.symbol,
+                    )
                 return "index", final_item.instrument_id
             if isinstance(final_item, FuturesQuote):
+                if self._db_cache:
+                    self._db_cache.insert_object_info(
+                        final_item.instrument_id,
+                        "future",
+                        final_item.symbol,
+                    )
                 return "future", final_item.instrument_id
             if isinstance(final_item, CurrencyQuote):
+                if self._db_cache:
+                    self._db_cache.insert_object_info(
+                        final_item.id,
+                        "currency_pair",
+                        final_item.symbol,
+                    )
                 return "currency_pair", final_item.id
-        if isinstance(item, UUID):
-            pass
 
     async def __resolve_UUID_repr_to_id(self, item: UUID):
         checks: list[Callable[[str], Awaitable[object | None]]] = [
@@ -414,6 +436,8 @@ class MarketDataImpl(TypingBase):
             self.__instrument_id_check,
             self.__option_id_check,
         ]
+        if self._db_cache:
+            self._db_cache.fetch_rh_object(item)
         results = await asyncio.gather(*[c(str(item)) for c in checks])
         final_type_li = [r for r in results if r]
         if not final_type_li:
@@ -421,14 +445,44 @@ class MarketDataImpl(TypingBase):
         else:
             final_type_li = final_type_li[0]
         if isinstance(final_type_li, StockInfo):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "instrument",
+                    final_type_li.symbol,
+                )
             return "instrument", str(item)
         if isinstance(final_type_li, IndexInfo):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "index",
+                    final_type_li.symbol,
+                )
             return "index", str(item)
         if isinstance(final_type_li, FuturesQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "future",
+                    final_type_li.symbol,
+                )
             return "future", str(item)
         if isinstance(final_type_li, CurrencyQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "currency_pair",
+                    final_type_li.symbol,
+                )
             return "currency_pair", str(item)
         if isinstance(final_type_li, OptionGreekData):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "option_strategy",
+                    final_type_li.symbol,
+                )
             return "option_strategy", str(item)
         return None
 
@@ -439,6 +493,10 @@ class MarketDataImpl(TypingBase):
         """
         Note: for option_strategies can only be modified with UUID.
         """
+        if self._db_cache:
+            result = self._db_cache.fetch_rh_object(item)
+            if result:
+                return result
         if isinstance(item, str):
             result = await self.__resolve_str_repr_to_id(item)
             logger.debug("String resolve result: %s", result)

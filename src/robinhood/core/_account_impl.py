@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import aiohttp
@@ -217,12 +217,37 @@ class AccountImpl(TypingBase):
         logger.info("Deleted %s from %s", item, watchlist_name)
         return result
 
+    def _watchlist_option_helper_function(
+        self,
+        option_id: str,
+        side: Literal["long", "short"],
+        method: Literal["create", "delete"],
+    ) -> dict[str, Any]:
+        return {
+            "legs": [
+                {
+                    "option_id": option_id,
+                    "position_type": side,
+                    "ratio_quantity": 1,
+                }
+            ],
+            "object_type": "option_strategy",
+            "operation": method,
+        }
+
     async def _watchlist_item_helper_function(
         self,
         item: str,
         watchlist_name: str,
         method: Literal["create", "delete"],
+        option_side: Literal["long", "short"] = "long",
     ):
+        """
+        If providing an option uuid, option positions defaults
+        to long. Robinhood does not support adding multi-leg option
+        strategies to the option watchlist, and only the option watchlist
+        can add options.
+        """
         _item: str | UUID
         if check_if_uuid4(item):
             _item = UUID(item, version=4)
@@ -236,12 +261,24 @@ class AccountImpl(TypingBase):
         if not watchlist:
             return None
 
+        # bruh
         object_type = "futures" if item_type == "future" else item_type
-        payload = {
-            "object_id": item_id,
-            "object_type": object_type,
-            "operation": method,
-        }
+        if object_type == "option_strategy":
+            if not check_if_uuid4(item_id):
+                raise ValueError(
+                    f"{item_id} must be a valid option strategy UUID"
+                )
+            payload = self._watchlist_option_helper_function(
+                item_id,
+                option_side,
+                method,
+            )
+        else:
+            payload = {
+                "object_id": item_id,
+                "object_type": object_type,
+                "operation": method,
+            }
         total_payload = {watchlist.id: [payload]}
         try:
             return await self._async_http_client._post(
@@ -263,6 +300,7 @@ class AccountImpl(TypingBase):
         -`Instrument`
         -`Future`
         -`CurrencyPair`
+        -`OptionStrategy`
         """
         res_json = await self._async_http_client._get(API_WATCHLIST_DEFAULT)
         if not res_json:

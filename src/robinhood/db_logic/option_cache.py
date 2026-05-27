@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from robinhood.dataclasses.api_dataclasses import (
@@ -14,6 +15,7 @@ from robinhood.dataclasses.api_dataclasses import (
     StockInfo,
 )
 from robinhood.utils._normalize_symbol import uppercase_input
+from robinhood.utils.types import StrWatchListItem
 
 from .db_schema import (
     EXPIRATION_DATES_TABLE,
@@ -23,6 +25,7 @@ from .db_schema import (
     OPTION_GREEK_DATA_TABLE,
     OPTION_IDS_INDEX,
     OPTION_IDS_TABLE,
+    ROBINHOOD_OBJECTS_TABLE,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,7 @@ class OptionCache:
         self.con.execute(OPTION_EXPIRATION_SYNC_TABLE)
         self.con.execute(OPTION_CHAIN_SYNC_TABLE)
         self.con.execute(OPTION_IDS_INDEX)
+        self.con.execute(ROBINHOOD_OBJECTS_TABLE)
         self.con.commit()
         logger.debug("Option Cache Initialized")
 
@@ -79,6 +83,39 @@ class OptionCache:
         if option_request.option_type:
             return False
         return True
+
+    def fetch_rh_object(
+        self, object_ident: str | UUID
+    ) -> tuple[StrWatchListItem, str] | None:
+        query = "SELECT object_type, object_id FROM robinhood_objects"
+        if isinstance(object_ident, UUID):
+            query += " WHERE object_id = :object_ident"
+        else:
+            query += " WHERE object_name = :object_ident"
+        args = {"object_ident": str(object_ident)}
+        cur = self.con.execute(query, args)
+        result = cur.fetchone()
+        logger.debug("Returned %s for %s", result, object_ident)
+        return result
+
+    def insert_object_info(
+        self,
+        object_id: str,
+        object_type: StrWatchListItem,
+        object_name: str | None,
+    ) -> None:
+        query = """
+            INSERT OR REPLACE INTO robinhood_objects
+            VALUES(:object_id, :object_type, :object_name)
+        """
+        args = {
+            "object_id": object_id,
+            "object_type": object_type,
+            "object_name": object_name,
+        }
+        self.con.execute(query, args)
+        logger.debug("Inserting %s, type: %s", object_name, object_type)
+        self.con.commit()
 
     def insert_stock_info(self, stock_info: StockInfo) -> None:
         """Insert stock_info: symbol, id, and chain_id into main_stock_info"""
