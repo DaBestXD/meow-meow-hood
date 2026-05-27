@@ -63,14 +63,14 @@ def normalize_currency_input(
     symbols: str | list[str], currency_code: str = "USD"
 ) -> str | list[str]:
     if isinstance(symbols, str):
-        symbols = symbols.upper().strip("-")
+        symbols = symbols.upper().replace("-", "")
         if not symbols.endswith(currency_code):
             symbols = symbols + currency_code
         return symbols
     if isinstance(symbols, list):
         return_val: list[str] = []
         for s in symbols:
-            s = s.upper().strip("-")
+            s = s.upper().replace("-", "")
             if not s.endswith(currency_code):
                 s = s + currency_code
             return_val.append(s)

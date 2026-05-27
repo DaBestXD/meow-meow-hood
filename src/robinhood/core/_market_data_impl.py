@@ -372,59 +372,58 @@ class MarketDataImpl(TypingBase):
 
     # only way i can think of to check item type in robinhood
     # is to call each end-point
-    @overload
-    async def __resolve_str_repr_to_id(self, item: UUID): ...
-
-    @overload
-    async def __resolve_str_repr_to_id(self, item: str): ...
-
     async def __resolve_str_repr_to_id(
-        self, item: str | UUID
+        self, item: str
     ) -> tuple[StrWatchListItem, str] | None:
-        if isinstance(item, str):
-            str_callables: list[Callable[[str], Awaitable[object | None]]] = [
-                self._get_stock_quotes,
-                self._get_index_quotes,
-                self._get_future_quote,
-                self._get_currency_quote,
-            ]
-            results = await asyncio.gather(*[f(item) for f in str_callables])
-            if not results:
-                raise InvalidTypeError(f"{item} is not valid type")
-            items = [r for r in results if r]
-            final_item = items[0]
-            if isinstance(final_item, InstrumentQuote):
-                if self._db_cache:
-                    self._db_cache.insert_object_info(
-                        final_item.instrument_id,
-                        "instrument",
-                        final_item.symbol,
-                    )
-                return "instrument", final_item.instrument_id
-            if isinstance(final_item, IndexQuote):
-                if self._db_cache:
-                    self._db_cache.insert_object_info(
-                        final_item.instrument_id,
-                        "index",
-                        final_item.symbol,
-                    )
-                return "index", final_item.instrument_id
-            if isinstance(final_item, FuturesQuote):
-                if self._db_cache:
-                    self._db_cache.insert_object_info(
-                        final_item.instrument_id,
-                        "future",
-                        final_item.symbol,
-                    )
-                return "future", final_item.instrument_id
-            if isinstance(final_item, CurrencyQuote):
-                if self._db_cache:
-                    self._db_cache.insert_object_info(
-                        final_item.id,
-                        "currency_pair",
-                        final_item.symbol,
-                    )
-                return "currency_pair", final_item.id
+        str_callables: list[Callable[[str], Awaitable[object | None]]] = [
+            self._get_stock_quotes,
+            self._get_index_quotes,
+            self._get_future_quote,
+            self._get_currency_quote,
+        ]
+        results = await asyncio.gather(
+            *[f(item) for f in str_callables],
+            return_exceptions=True,
+        )
+        if not results:
+            raise InvalidTypeError(f"{item} is not valid type")
+        items = [r for r in results if r and not isinstance(r, Exception)]
+        # totally not hacky fix :)
+        if "-" in item and len(items) >= 2:
+            items.pop(0)
+        final_item = items[0]
+        if isinstance(final_item, InstrumentQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.instrument_id,
+                    "instrument",
+                    final_item.symbol,
+                )
+            return "instrument", final_item.instrument_id
+        if isinstance(final_item, IndexQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.instrument_id,
+                    "index",
+                    final_item.symbol,
+                )
+            return "index", final_item.instrument_id
+        if isinstance(final_item, FuturesQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.instrument_id,
+                    "future",
+                    final_item.symbol,
+                )
+            return "future", final_item.instrument_id
+        if isinstance(final_item, CurrencyQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.id,
+                    "currency_pair",
+                    final_item.symbol,
+                )
+            return "currency_pair", final_item.id
 
     async def __resolve_UUID_repr_to_id(self, item: UUID):
         checks: list[Callable[[str], Awaitable[object | None]]] = [
@@ -438,8 +437,13 @@ class MarketDataImpl(TypingBase):
         ]
         if self._db_cache:
             self._db_cache.fetch_rh_object(item)
-        results = await asyncio.gather(*[c(str(item)) for c in checks])
-        final_type_li = [r for r in results if r]
+        results = await asyncio.gather(
+            *[c(str(item)) for c in checks],
+            return_exceptions=True,
+        )
+        final_type_li = [
+            r for r in results if r and not isinstance(r, Exception)
+        ]
         if not final_type_li:
             return None
         else:

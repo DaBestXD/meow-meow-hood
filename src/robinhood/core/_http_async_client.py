@@ -38,7 +38,7 @@ class RobinhoodAsyncHTTPClient:
         if status_code >= 500:
             # TODO: add retry logic for 5XX errors
             raise NotImplementedError(f"{endpoint}, {status_code}")
-        if status_code == 404:
+        if status_code == 404 or status_code == 400:
             raise EndpointNotFoundError(f"{endpoint}, {status_code}")
         if status_code == 429:
             logger.warning("429 error returned, you are being rate limited.")
