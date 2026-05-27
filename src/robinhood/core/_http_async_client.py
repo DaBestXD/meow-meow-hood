@@ -55,6 +55,11 @@ class RobinhoodAsyncHTTPClient:
             f"{endpoint} returned unexpected error {status_code}"
         )
 
+    def update_session_token(self, token: str) -> None:
+        if self.session:
+            self.session.headers.update({"Authorization": f"Bearer {token}"})
+        return None
+
     async def create_client_session(self) -> aiohttp.ClientSession:
         """Create or return the cached aiohttp client session."""
         if not self.session:
