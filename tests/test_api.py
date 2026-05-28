@@ -554,7 +554,7 @@ class TestSyncRobinhoodAPI(unittest.TestCase):
         mock_auto_open_browser: Mock,
     ) -> None:
         client = self.make_client()
-        mock_check_if_modified_date_within_range.return_value = False
+        mock_check_if_modified_date_within_range.return_value = True
 
         client.open_browser(Chrome(), wait_time=3, days=7)
 

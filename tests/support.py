@@ -318,7 +318,6 @@ def build_stock_order_response_payload() -> dict[str, object]:
         "sec_fees": "0.00",
         "taf_fees": "0.00",
         "cat_fees": "0.00",
-        "dollar_based_amount": None,
         "requested_notional_amount": None,
         "total_notional": {
             "amount": "1.35",

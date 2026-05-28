@@ -34,7 +34,6 @@ class TestPackageInit(unittest.TestCase):
             "OrderBook",
             "Robinhood",
             "RobinhoodAccount",
-            "MoneyAmount",
             "StockInfo",
             "StockOrder",
             "StockOrderResponse",

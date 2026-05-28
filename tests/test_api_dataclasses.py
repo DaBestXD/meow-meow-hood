@@ -5,7 +5,6 @@ from robinhood.dataclasses.api_dataclasses import (
     IndexInfo,
     IndexQuote,
     InstrumentQuote,
-    MoneyAmount,
     OptionGreekData,
     OptionOrderHistory,
     OptionPosition,
@@ -167,12 +166,18 @@ class TestApiDataclasses(unittest.TestCase):
         self.assertEqual(0.0, order.cumulative_quantity)
         self.assertEqual(1.35, order.price)
         self.assertIsNone(order.average_price)
-        self.assertIsInstance(order.total_notional, MoneyAmount)
-        self.assertEqual(1.35, order.total_notional.amount)
-        self.assertEqual("USD", order.total_notional.currency_code)
+        self.assertEqual(0.0, order.dollar_based_amount)
+        self.assertEqual(
+            {
+                "amount": "1.35",
+                "currency_code": "USD",
+                "currency_id": "1072fc76-1862-41ab-82c2-485837590762",
+            },
+            order.total_notional,
+        )
         self.assertEqual(
             "https://api.robinhood.com/orders/6a05547e-6b7d-4a8b-8275-f925ab3b4e6c/cancel/",
-            order.cancel_url,
+            order.cancel,
         )
 
     def test_orderbook_from_json_builds_bid_and_ask_levels(self):
