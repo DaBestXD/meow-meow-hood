@@ -29,7 +29,7 @@ Both clients share the same constructor parameters:
 
 | Method | Return Type |
 | --- | --- |
-| `get_stock_quotes(symbols)` | `FullQuote`, `list[FullQuote]`, or `None` |
+| `get_stock_quotes(symbols)` | `InstrumentQuote`, `list[InstrumentQuote]`, or `None` |
 | `get_stock_info(symbols)` | `StockInfo`, `list[StockInfo]`, or `None` |
 | `get_index_quotes(symbols)` | `IndexQuote`, `list[IndexQuote]`, or `None` |
 | `get_index_info(symbols)` | `IndexInfo`, `list[IndexInfo]`, or `None` |

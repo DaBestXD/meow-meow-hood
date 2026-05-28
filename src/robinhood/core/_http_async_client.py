@@ -6,7 +6,11 @@ from typing import Any
 import aiohttp
 
 from robinhood.constants import BASE_API_LINK, RESULTS
-from robinhood.errors import AuthenticationError
+from robinhood.errors import (
+    AuthenticationError,
+    EndpointNotFoundError,
+    RateLimitError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +30,7 @@ class RobinhoodAsyncHTTPClient:
         await self.session.close()
 
     # This should be blocking maybe?
-    def _error_status_code_handler(
-        self, endpoint: str, status_code: int
-    ) -> None:
+    def _error_status_code_handler(self, endpoint: str, status_code: int):
         """
         Raise the current package-level error for HTTP response statuses.
 
@@ -40,10 +42,11 @@ class RobinhoodAsyncHTTPClient:
         if status_code >= 500:
             # TODO: add retry logic for 5XX errors
             raise NotImplementedError(f"{endpoint}, {status_code}")
+        if status_code == 404 or status_code == 400:
+            raise EndpointNotFoundError(f"{endpoint}, {status_code}")
         if status_code == 429:
             logger.warning("429 error returned, you are being rate limited.")
-            # TODO: change this to a hardblock maybe sleep for a minute?
-            raise NotImplementedError(f"{endpoint}, {status_code}")
+            raise RateLimitError(f"{endpoint}, {status_code}")
         if status_code == 403 or status_code == 401:
             logger.critical("Access token invalid, relogin into robinhood")
             raise AuthenticationError(
@@ -51,6 +54,13 @@ class RobinhoodAsyncHTTPClient:
             )
         else:
             logger.warning("%s returned: %d", endpoint, status_code)
+        raise RuntimeError(
+            f"{endpoint} returned unexpected error {status_code}"
+        )
+
+    def update_session_token(self, token: str) -> None:
+        if self.session:
+            self.session.headers.update({"Authorization": f"Bearer {token}"})
         return None
 
     async def create_client_session(self) -> aiohttp.ClientSession:
@@ -66,7 +76,11 @@ class RobinhoodAsyncHTTPClient:
             )
         return self.session
 
-    async def _page_get(self, endpoint: str, results: list[dict]) -> list[dict]:
+    async def _page_get(
+        self,
+        endpoint: str,
+        results: list[dict],
+    ) -> list[dict]:
         session = await self.create_client_session()
         while True:
             logger.debug(
@@ -91,28 +105,62 @@ class RobinhoodAsyncHTTPClient:
         params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         session = await self.create_client_session()
-        async with session.get(
-            url=base_api_link + endpoint,
-            params=params,
-        ) as res:
-            res.raise_for_status()
-            res_json = await res.json()
-            next_link: str | None = res_json.get("next")
-            if not next_link:
-                return res_json.get(RESULTS, [res_json])
-            return await self._page_get(
-                next_link, results=res_json.get(RESULTS, [])
-            )
+        try:
+            async with session.get(
+                url=base_api_link + endpoint,
+                params=params,
+            ) as res:
+                res.raise_for_status()
+                res_json = await res.json()
+                next_link: str | None = res_json.get("next")
+                if not next_link:
+                    return res_json.get(RESULTS, [res_json])
+                return await self._page_get(
+                    next_link, results=res_json.get(RESULTS, [])
+                )
+        except aiohttp.ClientResponseError as e:
+            self._error_status_code_handler(endpoint, e.status)
 
     async def _download(
         self, endpoint: str, base_api_link: str = BASE_API_LINK
-    ):
+    ) -> bytes:
         session = await self.create_client_session()
         async with session.get(
             url=base_api_link + endpoint,
         ) as res:
             res.raise_for_status()
             return await res.read()
+
+    async def _delete(
+        self,
+        endpoint: str,
+        base_api_link: str = BASE_API_LINK,
+        data: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        session = await self.create_client_session()
+        try:
+            async with session.delete(
+                url=base_api_link + endpoint,
+                data=data,
+                json=json,
+            ) as res:
+                logger.debug(
+                    "DELETE request: %s, data: %s json: %s",
+                    endpoint,
+                    data if data else "none",
+                    json if json else "none",
+                )
+                res.raise_for_status()
+                if getattr(res, "status", None) == 204:
+                    return None
+                try:
+                    return await res.json()
+                except aiohttp.ContentTypeError:
+                    return None
+        except aiohttp.ClientResponseError as e:
+            self._error_status_code_handler(endpoint, e.status)
+        return None
 
     async def _post(
         self,

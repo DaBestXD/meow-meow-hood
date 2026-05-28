@@ -4,12 +4,6 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
 
-from robinhood.api_dataclasses import (
-    FuturesContract,
-    FuturesProduct,
-    IndexInfo,
-    OrderBook,
-)
 from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.constants import (
     API_FUTURES_CONTRACTS,
@@ -19,6 +13,12 @@ from robinhood.constants import (
     API_ORDERBOOK,
     PARAM_PRODUCT_IDS,
     PARAM_SYMBOLS,
+)
+from robinhood.dataclasses.api_dataclasses import (
+    FuturesContract,
+    FuturesProduct,
+    IndexInfo,
+    OrderBook,
 )
 from tests.support import (
     build_async_robinhood_client,

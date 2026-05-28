@@ -16,16 +16,16 @@
 # 🐈
 import importlib.metadata as metadata
 
-from .api_dataclasses import (
+from robinhood.dataclasses.api_dataclasses import (
     AchTransfer,
     BidAsk,
-    CurrencyPair,
-    FullQuote,
-    Future,
+    CurrencyQuote,
+    FuturesContract,
+    FuturesProduct,
+    FuturesQuote,
     IndexInfo,
     IndexQuote,
-    Instrument,
-    MoneyAmount,
+    InstrumentQuote,
     OptionChain,
     OptionGreekData,
     OptionInstrument,
@@ -33,15 +33,22 @@ from .api_dataclasses import (
     OptionOrderResponse,
     OptionPosition,
     OptionRequest,
-    OptionStrategy,
     OrderBook,
     RobinhoodAccount,
     StockInfo,
     StockOrder,
     StockOrderResponse,
     StockPosition,
+)
+from robinhood.dataclasses.watchlist_classes import (
+    CurrencyPair,
+    Future,
+    Index,
+    Instrument,
+    OptionStrategy,
     WatchList,
 )
+
 from .async_robinhood_class import AsyncRobinhood
 from .sync_robinhood_class import Robinhood
 
@@ -55,12 +62,16 @@ __all__ = [
     "AsyncRobinhood",
     "BidAsk",
     "CurrencyPair",
-    "FullQuote",
+    "CurrencyQuote",
+    "InstrumentQuote",
     "Future",
+    "FuturesContract",
+    "FuturesProduct",
+    "FuturesQuote",
+    "Index",
     "Instrument",
     "IndexInfo",
     "IndexQuote",
-    "MoneyAmount",
     "OptionChain",
     "OptionGreekData",
     "OptionInstrument",

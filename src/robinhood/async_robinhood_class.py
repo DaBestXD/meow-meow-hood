@@ -4,14 +4,16 @@ import logging
 from types import TracebackType
 from typing import Literal, Self, overload
 
-from robinhood.api_dataclasses import (
+from robinhood.core._core_robinhood import _CoreRobinhood
+from robinhood.dataclasses.api_dataclasses import (
     AchTransfer,
-    FullQuote,
+    CurrencyQuote,
     FuturesContract,
     FuturesProduct,
     FuturesQuote,
     IndexInfo,
     IndexQuote,
+    InstrumentQuote,
     OptionChain,
     OptionGreekData,
     OptionOrderHistory,
@@ -24,9 +26,8 @@ from robinhood.api_dataclasses import (
     StockOrder,
     StockOrderResponse,
     StockPosition,
-    WatchList,
 )
-from robinhood.core._core_robinhood import _CoreRobinhood
+from robinhood.dataclasses.watchlist_classes import WatchList
 
 logger = logging.getLogger(__name__)
 
@@ -99,17 +100,23 @@ class AsyncRobinhood(_CoreRobinhood):
         return await self._get_index_quotes(symbols)
 
     @overload
-    async def get_stock_quotes(self, symbols: str) -> FullQuote | None: ...
+    async def get_stock_quotes(
+        self, symbols: str
+    ) -> InstrumentQuote | None: ...
     @overload
     async def get_stock_quotes(
         self, symbols: list[str]
-    ) -> list[FullQuote] | None: ...
+    ) -> list[InstrumentQuote] | None: ...
 
     async def get_stock_quotes(
         self, symbols: str | list[str]
-    ) -> FullQuote | list[FullQuote] | None:
+    ) -> InstrumentQuote | list[InstrumentQuote] | None:
         """Return stock quote data for one symbol or a list of symbols."""
         return await self._get_stock_quotes(symbols)
+
+    async def get_currency_quote(self, symbol: str) -> CurrencyQuote | None:
+        """TODO: add docstring later"""
+        return await self._get_currency_quote(symbol)
 
     async def get_orderbook(self, symbol: str) -> OrderBook | None:
         """Return bid and ask order book rows for a stock symbol."""
@@ -244,7 +251,7 @@ class AsyncRobinhood(_CoreRobinhood):
         market_hours: Literal[
             "regular_hours", "extended_hours"
         ] = "regular_hours",
-        time_in_force: Literal["gfd", "gtc"] = "gtc",
+        time_in_force: Literal["gfd", "gtc"] = "gfd",
         dollar_based_amount: float | None = None,
         quantity: float | None = None,
         currency_code: str = "USD",
@@ -309,6 +316,52 @@ class AsyncRobinhood(_CoreRobinhood):
             `OptionStrategy`, `Instrument`, `Future`, `CurrencyPair`
         """
         return await self._get_watchlists()
+
+    async def get_watchlist_by_name(
+        self,
+        watchlist_name: str,
+    ) -> WatchList | None:
+        """TODO: add docstring later"""
+        return await self._get_watchlist_by_name(watchlist_name)
+
+    async def create_watchlist(
+        self,
+        display_name: str,
+        icon_emoji: str = "🐱",
+        list_position: int = 0,
+    ) -> WatchList:
+        """Create a Robinhood watchlist."""
+        return await self._create_watchlist(
+            display_name,
+            icon_emoji,
+            list_position,
+        )
+
+    async def delete_watchlist(self, watchlist_name: str) -> None:
+        """Delete a Robinhood watchlist by display name."""
+        return await self._delete_watchlist(watchlist_name)
+
+    async def add_item_to_watchlist(
+        self,
+        item: str,
+        watchlist_name: str,
+    ) -> dict | None:
+        """Add an equity symbol to a Robinhood watchlist."""
+        return await self._add_item_to_watchlist(
+            item,
+            watchlist_name,
+        )
+
+    async def remove_item_from_watchlist(
+        self,
+        item: str,
+        watchlist_name: str,
+    ) -> dict | None:
+        """Remove an item from a Robinhood watchlist."""
+        return await self._remove_item_from_watchlist(
+            item,
+            watchlist_name,
+        )
 
     async def cancel_option_order(self, id: str) -> None:
         """Use option order id from OptionOrderResponse to cancel"""

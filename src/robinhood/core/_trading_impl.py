@@ -7,7 +7,13 @@ from collections import Counter
 from typing import Literal
 from uuid import uuid4
 
-from robinhood.api_dataclasses import (
+from robinhood.constants import (
+    API_OPTION_ORDER,
+    API_STOCK_ORDER,
+    BASE_API_LINK,
+)
+from robinhood.core._typing_base import TypingBase
+from robinhood.dataclasses.api_dataclasses import (
     OptionOrder,
     OptionOrderResponse,
     OptionRequest,
@@ -17,12 +23,6 @@ from robinhood.api_dataclasses import (
     StockOrderStockAmount,
     _OptionLeg,
 )
-from robinhood.constants import (
-    API_OPTION_ORDER,
-    API_STOCK_ORDER,
-    BASE_API_LINK,
-)
-from robinhood.core._typing_base import TypingBase
 from robinhood.errors import (
     AccountIdNotFoundError,
     InstruemtNotFoundError,

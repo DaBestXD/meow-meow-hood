@@ -7,12 +7,6 @@ import logging
 from collections import defaultdict
 from typing import Any, overload
 
-from robinhood.api_dataclasses import (
-    OptionChain,
-    OptionGreekData,
-    OptionInstrument,
-    OptionRequest,
-)
 from robinhood.constants import (
     API_INSTRUMENTS,
     API_OPTION_CHAINS,
@@ -29,6 +23,12 @@ from robinhood.constants import (
     PARAM_TRADABLE_CHAIN_ID,
 )
 from robinhood.core._typing_base import TypingBase
+from robinhood.dataclasses.api_dataclasses import (
+    OptionChain,
+    OptionGreekData,
+    OptionInstrument,
+    OptionRequest,
+)
 from robinhood.utils._normalize_symbol import uppercase_input
 from robinhood.utils.option_matching import (
     map_option_requests_to_ois,

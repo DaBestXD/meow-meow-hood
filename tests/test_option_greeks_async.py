@@ -6,9 +6,9 @@ from dataclasses import asdict
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from robinhood.api_dataclasses import OptionChain, OptionRequest
 from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.constants import API_OPTIONS_GREEKS_DATA, PARAM_OPTION_IDS
+from robinhood.dataclasses.api_dataclasses import OptionChain, OptionRequest
 from tests.support import (
     build_async_robinhood_client,
     build_option_chain_payload,

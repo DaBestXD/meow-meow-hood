@@ -4,15 +4,15 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from robinhood.api_dataclasses import (
-    FullQuote,
+from robinhood.async_robinhood_class import AsyncRobinhood
+from robinhood.constants import API_OPTION_ORDER, API_STOCK_ORDER, BASE_API_LINK
+from robinhood.dataclasses.api_dataclasses import (
+    InstrumentQuote,
     OptionOrderResponse,
     OptionRequest,
     StockInfo,
     StockOrderResponse,
 )
-from robinhood.async_robinhood_class import AsyncRobinhood
-from robinhood.constants import API_OPTION_ORDER, API_STOCK_ORDER, BASE_API_LINK
 from robinhood.errors import (
     AccountIdNotFoundError,
     InstruemtNotFoundError,
@@ -20,7 +20,7 @@ from robinhood.errors import (
 )
 from tests.support import (
     build_async_robinhood_client,
-    build_full_quote_payload,
+    build_instrument_quote_payload,
     build_option_instrument,
     build_option_order_response_payload,
     build_stock_info_payload,
@@ -63,7 +63,9 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
             return_value=StockInfo.from_json(build_stock_info_payload())
         )
         client._get_stock_quotes = AsyncMock(
-            return_value=FullQuote.from_json(build_full_quote_payload())
+            return_value=InstrumentQuote.from_json(
+                build_instrument_quote_payload()
+            )
         )
 
     async def test_market_stock_order_rejects_invalid_side(self) -> None:

@@ -64,3 +64,10 @@ OPTION_IDS_INDEX = """
     CREATE INDEX IF NOT EXISTS idx_option_ids_lookup
     ON option_ids(symbol, exp_date, option_type, strike_price);
 """
+ROBINHOOD_OBJECTS_TABLE = """
+    CREATE TABLE IF NOT EXISTS robinhood_objects(
+        object_id TEXT PRIMARY KEY NOT NULL,
+        object_type TEXT NOT NULL,
+        object_name TEXT NOT NULL
+    );
+"""

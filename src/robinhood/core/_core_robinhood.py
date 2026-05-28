@@ -119,16 +119,29 @@ class _CoreRobinhood(
         Checks if the last modified date is greater than one day,
         then open the browser pointed at robinhood, closes after
         N seconds(default is 10 seconds)
+        You will need to run this function in order to keep the browser
+        logged in.
         """
-        if not check_if_modified_date_within_range(days=days):
+        if check_if_modified_date_within_range(days=days):
             auto_open_browser(browser, wait_time=wait_time)
         return None
 
-    def refresh_access_token(self) -> None:
+    def refresh_access_token(
+        self,
+        browser: Browser | None,
+        auto_open_browser: bool = True,
+    ) -> None:
         """
+        Wrapper function that:
+        -Opens browser if last access timed
+        -
         Function that will automatically open browser if token is expired,
-        and attempts to retrieve a new token
+        and attempts to retrieve a new token, this function will automatically
+        open the browser if the last access time is greater than 1 day, this
+        is required to keep the session logged in on the browser.
         """
+        if browser and auto_open_browser:
+            self.open_browser(browser)
         access_token = self._async_http_client.access_token
         env_path = self.env_path if self.env_path else ""
         token = _refresh_access_token(
@@ -137,7 +150,7 @@ class _CoreRobinhood(
             True if self.env_path else False,
         )
         if isinstance(token, str):
-            self._async_http_client.access_token = token
+            self._async_http_client.update_session_token(token)
         return None
 
     def execute_custom_sql(

@@ -5,14 +5,16 @@ from functools import cache
 from types import TracebackType
 from typing import Literal, Self, overload
 
-from robinhood.api_dataclasses import (
+from robinhood.core._core_robinhood import _CoreRobinhood
+from robinhood.dataclasses.api_dataclasses import (
     AchTransfer,
-    FullQuote,
+    CurrencyQuote,
     FuturesContract,
     FuturesProduct,
     FuturesQuote,
     IndexInfo,
     IndexQuote,
+    InstrumentQuote,
     OptionChain,
     OptionGreekData,
     OptionOrderHistory,
@@ -25,9 +27,8 @@ from robinhood.api_dataclasses import (
     StockOrder,
     StockOrderResponse,
     StockPosition,
-    WatchList,
 )
-from robinhood.core._core_robinhood import _CoreRobinhood
+from robinhood.dataclasses.watchlist_classes import WatchList
 
 logger = logging.getLogger(__name__)
 
@@ -97,15 +98,21 @@ class Robinhood(_CoreRobinhood):
         return self._run(self._get_index_quotes(symbols))
 
     @overload
-    def get_stock_quotes(self, symbol: str) -> FullQuote | None: ...
+    def get_stock_quotes(self, symbol: str) -> InstrumentQuote | None: ...
     @overload
-    def get_stock_quotes(self, symbol: list[str]) -> list[FullQuote] | None: ...
+    def get_stock_quotes(
+        self, symbol: list[str]
+    ) -> list[InstrumentQuote] | None: ...
 
     def get_stock_quotes(
         self, symbol: str | list[str]
-    ) -> FullQuote | list[FullQuote] | None:
+    ) -> InstrumentQuote | list[InstrumentQuote] | None:
         """Return stock quote data for one symbol or a list of symbols."""
         return self._run(self._get_stock_quotes(symbol))
+
+    def get_currency_quote(self, symbol: str) -> CurrencyQuote | None:
+        """TODO: add docstring later"""
+        return self._run(self._get_currency_quote(symbol))
 
     def get_orderbook(self, symbol: str) -> OrderBook | None:
         """Return bid and ask order book rows for a stock symbol."""
@@ -227,10 +234,62 @@ class Robinhood(_CoreRobinhood):
     def get_watchlists(self) -> list[WatchList] | None:
         """
         Return a list of watchlist items
-        Return types include:
+        Item types include:
             `OptionStrategy`, `Instrument`, `Future`, `CurrencyPair`
         """
         return self._run(self._get_watchlists())
+
+    def get_watchlist_by_name(
+        self,
+        watchlist_name: str,
+    ) -> WatchList | None:
+        """TODO: add docstring later"""
+        return self._run(self._get_watchlist_by_name(watchlist_name))
+
+    def create_watchlist(
+        self,
+        display_name: str,
+        icon_emoji: str = "🐱",
+        list_position: int = 0,
+    ) -> WatchList:
+        """Create a Robinhood watchlist, default emoji is a cat."""
+        return self._run(
+            self._create_watchlist(
+                display_name,
+                icon_emoji,
+                list_position,
+            )
+        )
+
+    def delete_watchlist(self, watchlist_name: str) -> None:
+        """Delete a Robinhood watchlist by display name."""
+        return self._run(self._delete_watchlist(watchlist_name))
+
+    def add_item_to_watchlist(
+        self,
+        item: str,
+        watchlist_name: str,
+    ) -> dict | None:
+        """Add an equity symbol to a Robinhood watchlist."""
+        return self._run(
+            self._add_item_to_watchlist(
+                item,
+                watchlist_name,
+            )
+        )
+
+    def remove_item_from_watchlist(
+        self,
+        item: str,
+        watchlist_name: str,
+    ) -> dict | None:
+        """Remove an item from a Robinhood watchlist."""
+        return self._run(
+            self._remove_item_from_watchlist(
+                item,
+                watchlist_name,
+            )
+        )
 
     def place_limit_stock_order(
         self,

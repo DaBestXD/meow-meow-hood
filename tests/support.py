@@ -6,7 +6,10 @@ import json
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
-from robinhood.api_dataclasses import OptionGreekData, OptionInstrument
+from robinhood.dataclasses.api_dataclasses import (
+    OptionGreekData,
+    OptionInstrument,
+)
 
 if TYPE_CHECKING:
     from robinhood.async_robinhood_class import AsyncRobinhood
@@ -132,7 +135,7 @@ def build_option_chain_payload(
     }
 
 
-def build_full_quote_payload(
+def build_instrument_quote_payload(
     *,
     symbol: str = "SPY",
     instrument_id: str = "instrument-id",
@@ -315,7 +318,6 @@ def build_stock_order_response_payload() -> dict[str, object]:
         "sec_fees": "0.00",
         "taf_fees": "0.00",
         "cat_fees": "0.00",
-        "dollar_based_amount": None,
         "requested_notional_amount": None,
         "total_notional": {
             "amount": "1.35",

@@ -60,7 +60,7 @@ finally:
     rh.close()
 ```
 
-`get_stock_quotes("SPY")` returns a `FullQuote` object or `None`.
+`get_stock_quotes("SPY")` returns an `InstrumentQuote` object or `None`.
 
 ## Use A Manual Access Token
 
@@ -119,7 +119,7 @@ with Robinhood() as rh:
         print(quote.last_trade_price)
 ```
 
-For a single symbol, `get_stock_quotes()` returns one `FullQuote` or `None`.
+For a single symbol, `get_stock_quotes()` returns one `InstrumentQuote` or `None`.
 
 ## Fetch Stock Info
 

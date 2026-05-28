@@ -25,6 +25,7 @@ from robinhood.browser_functions.browser_token_parser import (
     Browser,
     Chrome,
     Firefox,
+    auto_open_browser,
     get_token,
 )
 
@@ -106,7 +107,7 @@ def file_stat(browser: Browser) -> int:
     raise ValueError("unable to find db_file stat")
 
 
-def check_if_modified_date_within_range(days: int = 7) -> bool:
+def check_if_modified_date_within_range(days: int) -> bool:
     """
     Check if the last modified date is within a certain range,
     default is 7 days. If this fails the check you will most likely
@@ -126,6 +127,21 @@ def check_if_modified_date_within_range(days: int = 7) -> bool:
     return last_mod >= days
 
 
+def _open_browser(
+    browser: Browser,
+    wait_time: int = 10,
+    days: int = 1,
+) -> None:
+    """
+    Checks if the last modified date is greater than one day,
+    then open the browser pointed at robinhood, closes after
+    N seconds(default is 10 seconds)
+    """
+    if check_if_modified_date_within_range(days=days):
+        auto_open_browser(browser, wait_time=wait_time)
+    return None
+
+
 def _refresh_access_token(
     access_token: str,
     env_path: str | PathLike[str],
@@ -143,7 +159,9 @@ def _refresh_access_token(
         logger.info("Access token is not expired, exp: %s", str(token_exp))
         return None
     # Raise error if there's no way to recover the auth token
-    if token_exp <= int(time.time()) and check_if_modified_date_within_range():
+    if token_exp <= int(time.time()) and check_if_modified_date_within_range(
+        days=1
+    ):
         raise RuntimeError(
             """Token is expired and auth modified date is greater than 30 days.
             You will need to relogin manually"""

@@ -2,26 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import overload
+from typing import Awaitable, Callable, overload
+from uuid import UUID
 
-from robinhood.api_dataclasses import (
-    FullQuote,
-    FuturesContract,
-    FuturesProduct,
-    FuturesQuote,
-    IndexInfo,
-    IndexQuote,
-    OrderBook,
-    StockInfo,
-)
 from robinhood.constants import (
+    API_CURRENCY_QUOTES,
     API_FUTURES_CONTRACTS,
     API_FUTURES_PRODUCTS,
     API_FUTURES_QUOTES,
     API_INDEX_QUOTE,
     API_INDEXES,
     API_INSTRUMENTS,
+    API_OPTIONS_GREEKS_DATA,
     API_ORDERBOOK,
     API_QUOTES,
     DATA,
@@ -32,7 +26,26 @@ from robinhood.constants import (
     SUCCESS,
 )
 from robinhood.core._typing_base import TypingBase
-from robinhood.utils._normalize_symbol import uppercase_input
+from robinhood.dataclasses.api_dataclasses import (
+    CurrencyQuote,
+    FuturesContract,
+    FuturesProduct,
+    FuturesQuote,
+    IndexInfo,
+    IndexQuote,
+    InstrumentQuote,
+    OptionGreekData,
+    OrderBook,
+    StockInfo,
+)
+from robinhood.errors import InvalidTypeError, NoFutureProductsReturnedError
+from robinhood.utils._normalize_symbol import (
+    check_if_uuid4,
+    normalize_currency_input,
+    normalize_future_input,
+    uppercase_input,
+)
+from robinhood.utils.types import StrWatchListItem
 
 logger = logging.getLogger(__name__)
 
@@ -119,26 +132,32 @@ class MarketDataImpl(TypingBase):
         )
         if not res_json:
             return None
-        index_quotes = [
-            IndexQuote.from_json(i["data"]) for i in res_json[0]["data"] if i
-        ]
+        index_quotes = []
+        for i in res_json[0]["data"]:
+            if i:
+                try:
+                    index_quotes.append(IndexQuote.from_json(i["data"]))
+                except KeyError:
+                    continue
         if not index_quotes:
             return None
         return index_quotes if len(index_quotes) > 1 else index_quotes[0]
 
     @overload
-    async def _get_stock_quotes(self, symbol: str) -> FullQuote | None: ...
+    async def _get_stock_quotes(
+        self, symbol: str
+    ) -> InstrumentQuote | None: ...
 
     @overload
     async def _get_stock_quotes(
         self, symbol: list[str]
-    ) -> list[FullQuote] | None: ...
+    ) -> list[InstrumentQuote] | None: ...
 
     async def _get_stock_quotes(
         self, symbol: list[str] | str
-    ) -> FullQuote | list[FullQuote] | None:
+    ) -> InstrumentQuote | list[InstrumentQuote] | None:
         """
-        Returns a list of FullQuote dataclasses
+        Returns a list of InstrumentQuote dataclasses
         Ensure symbols are capitalized
         """
         symbol = uppercase_input(symbol)
@@ -147,7 +166,7 @@ class MarketDataImpl(TypingBase):
         res_json = await self._async_http_client._get(
             endpoint=API_QUOTES, params={PARAM_SYMBOLS: joined_symbol}
         )
-        return_val = [FullQuote.from_json(r) for r in res_json if r]
+        return_val = [InstrumentQuote.from_json(r) for r in res_json if r]
         if not res_json:
             return None
         return return_val if len(return_val) > 1 else return_val[0]
@@ -179,8 +198,9 @@ class MarketDataImpl(TypingBase):
         and filters for the symbols.
         Symbols should be as follows:
         /ES not specific future contracts like /ESM26,
+        Forward slash is not required
         """
-        symbol = uppercase_input(symbol)
+        symbol = normalize_future_input(symbol)
         futures_prods = await self._get_all_futures_products()
         if not futures_prods:
             # get_all_futures_products has a warning logger already
@@ -213,10 +233,14 @@ class MarketDataImpl(TypingBase):
         or actual contract id
         Using exact symbols has some overhead costs,
         suggested to use contract ids.
-        Use exact symbol name ex: /ESM26, forward slash is not optional
+        Use exact symbol name ex: /ESM26, forward slash is optional
         """
         if isinstance(ids, str):
             ids = [ids]
+        if not check_if_uuid4(ids):
+            ids = normalize_future_input(ids)
+            mapping = await self._resolve_symbol_to_id(ids)
+            ids = list(mapping.values())
         if len(ids) > 20:
             raise ValueError("max amount of ids is 20")
         params = {PARAM_ID: ",".join(ids)}
@@ -235,6 +259,26 @@ class MarketDataImpl(TypingBase):
         if not quotes:
             return None
         return quotes if len(quotes) > 1 else quotes[0]
+
+    async def _resolve_symbol_to_id(
+        self, symbols: str | list[str]
+    ) -> dict[str, str]:
+        all_futures = await self._get_all_futures_products()
+        mapping_symbols_to_ids: dict[str, str] = {}
+        if not all_futures:
+            raise NoFutureProductsReturnedError
+        if isinstance(symbols, str):
+            for s in all_futures:
+                if s.displaySymbol in symbols:
+                    mapping_symbols_to_ids[symbols] = s.activeFuturesContractId
+            return mapping_symbols_to_ids
+        if isinstance(symbols, list):
+            for s in all_futures:
+                for sy in symbols:
+                    if s.displaySymbol in sy:
+                        logger.debug("Found %s for %s", s.displaySymbol, sy)
+                        mapping_symbols_to_ids[sy] = s.activeFuturesContractId
+            return mapping_symbols_to_ids
 
     async def _get_all_futures_products(
         self,
@@ -272,3 +316,198 @@ class MarketDataImpl(TypingBase):
         future_contracts = [FuturesContract.from_json(f) for f in res_json if f]
         future_contracts.sort(key=lambda fut: fut.expirationMmy)
         return future_contracts
+
+    async def _get_currency_quote(self, symbol: str) -> CurrencyQuote | None:
+        symbol = normalize_currency_input(symbol)
+        params = {PARAM_SYMBOLS: symbol}
+        res_json = await self._async_http_client._get(
+            endpoint=API_CURRENCY_QUOTES,
+            params=params,
+        )
+        if not res_json or not res_json[0]:
+            return None
+        return CurrencyQuote.from_json(res_json[0])
+
+    async def __currency_id_check(self, _id: str) -> CurrencyQuote | None:
+        """
+        Only accepts UUID
+        Not a fully fleshed out endpoint yet
+        Just for the check input type function
+        """
+        params = {PARAM_ID: _id}
+        res_json = await self._async_http_client._get(
+            endpoint=API_CURRENCY_QUOTES,
+            params=params,
+        )
+        if not res_json or not res_json[0]:
+            return None
+        return CurrencyQuote.from_json(res_json[0])
+
+    async def __instrument_id_check(self, _id: str) -> StockInfo | None:
+        params = {PARAM_ID: _id}
+        res_json = await self._async_http_client._get(
+            endpoint=API_INSTRUMENTS, params=params
+        )
+        if not res_json or not res_json[0]:
+            return None
+        return StockInfo.from_json(res_json[0])
+
+    async def __option_id_check(self, _id: str) -> OptionGreekData | None:
+        params = {PARAM_ID: _id}
+        res_json = await self._async_http_client._get(
+            endpoint=API_OPTIONS_GREEKS_DATA, params=params
+        )
+        if not res_json or not res_json[0]:
+            return None
+        return OptionGreekData.from_json(res_json[0])
+
+    async def __index_id_check(self, _id: str) -> IndexInfo | None:
+        params = {PARAM_ID: _id}
+        res_json = await self._async_http_client._get(
+            endpoint=API_INDEXES, params=params
+        )
+        if not res_json or not res_json[0]:
+            return None
+        return IndexInfo.from_json(res_json[0])
+
+    # only way i can think of to check item type in robinhood
+    # is to call each end-point
+    async def __resolve_str_repr_to_id(
+        self, item: str
+    ) -> tuple[StrWatchListItem, str] | None:
+        str_callables: list[Callable[[str], Awaitable[object | None]]] = [
+            self._get_stock_quotes,
+            self._get_index_quotes,
+            self._get_future_quote,
+            self._get_currency_quote,
+        ]
+        results = await asyncio.gather(
+            *[f(item) for f in str_callables],
+            return_exceptions=True,
+        )
+        if not results:
+            raise InvalidTypeError(f"{item} is not valid type")
+        items = [r for r in results if r and not isinstance(r, Exception)]
+        # totally not hacky fix :)
+        if "-" in item and len(items) >= 2:
+            items.pop(0)
+        final_item = items[0]
+        if isinstance(final_item, InstrumentQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.instrument_id,
+                    "instrument",
+                    final_item.symbol,
+                )
+            return "instrument", final_item.instrument_id
+        if isinstance(final_item, IndexQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.instrument_id,
+                    "index",
+                    final_item.symbol,
+                )
+            return "index", final_item.instrument_id
+        if isinstance(final_item, FuturesQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.instrument_id,
+                    "future",
+                    final_item.symbol,
+                )
+            return "future", final_item.instrument_id
+        if isinstance(final_item, CurrencyQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    final_item.id,
+                    "currency_pair",
+                    final_item.symbol,
+                )
+            return "currency_pair", final_item.id
+
+    async def __resolve_UUID_repr_to_id(
+        self, item: UUID
+    ) -> tuple[StrWatchListItem, str] | None:
+        checks: list[Callable[[str], Awaitable[object | None]]] = [
+            # Future quote endpoint already works with UUID
+            # doesnt need its own check function
+            self._get_future_quote,
+            self.__index_id_check,
+            self.__currency_id_check,
+            self.__instrument_id_check,
+            self.__option_id_check,
+        ]
+        if self._db_cache:
+            self._db_cache.fetch_rh_object(item)
+        results = await asyncio.gather(
+            *[c(str(item)) for c in checks],
+            return_exceptions=True,
+        )
+        final_type_li = [
+            r for r in results if r and not isinstance(r, Exception)
+        ]
+        if not final_type_li:
+            return None
+        else:
+            final_type_li = final_type_li[0]
+        if isinstance(final_type_li, StockInfo):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "instrument",
+                    final_type_li.symbol,
+                )
+            return "instrument", str(item)
+        if isinstance(final_type_li, IndexInfo):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "index",
+                    final_type_li.symbol,
+                )
+            return "index", str(item)
+        if isinstance(final_type_li, FuturesQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "future",
+                    final_type_li.symbol,
+                )
+            return "future", str(item)
+        if isinstance(final_type_li, CurrencyQuote):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "currency_pair",
+                    final_type_li.symbol,
+                )
+            return "currency_pair", str(item)
+        if isinstance(final_type_li, OptionGreekData):
+            if self._db_cache:
+                self._db_cache.insert_object_info(
+                    str(item),
+                    "option_strategy",
+                    final_type_li.symbol,
+                )
+            return "option_strategy", str(item)
+        return None
+
+    async def _check_input_type(
+        self,
+        item: str | UUID,
+    ) -> tuple[StrWatchListItem, str] | None:
+        """
+        Note: for option_strategies can only be modified with UUID.
+        """
+        if self._db_cache:
+            result = self._db_cache.fetch_rh_object(item)
+            if result:
+                return result
+        if isinstance(item, str):
+            result = await self.__resolve_str_repr_to_id(item)
+            logger.debug("String resolve result: %s", result)
+            return result
+        if isinstance(item, UUID):
+            result = await self.__resolve_UUID_repr_to_id(item)
+            logger.debug("UUID resolve result: %s", result)
+            return result
