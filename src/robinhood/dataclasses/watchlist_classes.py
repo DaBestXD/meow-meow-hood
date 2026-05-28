@@ -18,6 +18,9 @@ class Index(ApiPayloadMixin):
     high_52_weeks: float
     low_52_weeks: float
 
+    def __str__(self) -> str:
+        return f"{self.name}, low_52_weeks: {self.low_52_weeks:.2f}, high_52_weeks: {self.high_52_weeks:.2f}"  # noqa E501
+
 
 @dataclass(frozen=True, slots=True)
 class CurrencyPair(ApiPayloadMixin):
@@ -29,6 +32,9 @@ class CurrencyPair(ApiPayloadMixin):
     market_cap: float
     high_52_weeks: float
     low_52_weeks: float
+
+    def __str__(self) -> str:
+        return f"{self.name}, market_cap: {self.market_cap:_}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +53,9 @@ class Instrument(ApiPayloadMixin):
     low_52_weeks: float
     pe_ratio: float
 
+    def __str__(self) -> str:
+        return f"{self.name}, market_cap: {self.market_cap:_}, pe_ratio: {self.pe_ratio}"  # noqa: E501
+
 
 @dataclass(frozen=True, slots=True)
 class Future(ApiPayloadMixin):
@@ -56,6 +65,9 @@ class Future(ApiPayloadMixin):
     symbol: str
     object_id: str
     futures_margin_requirement: float
+
+    def __str__(self) -> str:
+        return f"{self.name}, margin:{self.futures_margin_requirement}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +82,7 @@ class OptionStrategy(ApiPayloadMixin):
 
     @property
     def symbol(self) -> str:
-        return self.name
+        return f"{self.name}, open_price: {self.open_price_without_tvm:.2f}"
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
@@ -90,6 +102,9 @@ class OptionStrategy(ApiPayloadMixin):
         )
         return cls(**data)
 
+    def __str__(self) -> str:
+        return f"{self.name} open_price: {self.open_price_without_tvm}"
+
 
 WatchListItem = Index | CurrencyPair | Instrument | Future | OptionStrategy
 
@@ -101,3 +116,7 @@ class WatchList:
     name: str
     id: str
     items: list[WatchListItem]
+
+    def __str__(self) -> str:
+        str_items = "".join([str(i) + "\n" for i in self.items])
+        return f"Name: {self.name}\nID: {self.id}\nItems:\n{str_items}"  # noqa E501

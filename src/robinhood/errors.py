@@ -1,5 +1,9 @@
 class RobinhoodError(Exception):
-    """Base exception for package-specific errors."""
+    """Base exception for package-specific errors"""
+
+
+class RateLimitError(RobinhoodError):
+    """Raised when HTTP 429 error is returned"""
 
 
 class OrderFailedError(RobinhoodError):

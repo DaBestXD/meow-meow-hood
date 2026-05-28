@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from functools import cache
 from types import NotImplementedType
 from typing import Any, Literal, Self, TypedDict, get_type_hints
@@ -310,19 +311,14 @@ class StockOrder(ApiPayloadMixin):
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
         """Create a stock order row and normalize notional price data."""
+        print(payload)
         data = cls._filter_dict(payload, *cls._dataclass_field_factory())
         total_notional = payload.get("total_notional") or {}
         data["price"] = float(total_notional.get("amount", 0.0) or 0.0)
         return cls(**data)
 
-
-@dataclass(frozen=True, slots=True)
-class MoneyAmount(ApiPayloadMixin):
-    """Money amount with currency metadata."""
-
-    amount: float
-    currency_code: str
-    currency_id: str | None = None
+    def __str__(self) -> str:
+        return f"{self.side} {self.id} {self.type}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,7 +330,7 @@ class StockOrderResponse(ApiPayloadMixin):
     account: str
     position: str
     instrument: str
-    cancel_url: str
+    cancel: str
     state: str
     side: str
     type: str
@@ -349,10 +345,10 @@ class StockOrderResponse(ApiPayloadMixin):
     sec_fees: float
     taf_fees: float
     cat_fees: float
-    dollar_based_amount: MoneyAmount | None
-    requested_notional_amount: MoneyAmount | None
-    total_notional: MoneyAmount | None
-    executed_notional: MoneyAmount | None
+    dollar_based_amount: float
+    requested_notional_amount: dict[str, str | None]
+    total_notional: dict[str, str | None]
+    executed_notional: dict[str, str | None]
     market_hours: str
     extended_hours: bool
     override_dtbp_checks: bool
@@ -368,24 +364,13 @@ class StockOrderResponse(ApiPayloadMixin):
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
         """Create a stock order response and normalize nested money amounts."""
-        normalized_payload = dict(payload)
-        normalized_payload["cancel_url"] = payload["cancel"]
-        data = cls._filter_dict(
-            normalized_payload, *cls._dataclass_field_factory()
-        )
-        data["average_price"] = (
-            float(payload["average_price"])
-            if payload.get("average_price") is not None
-            else None
-        )
-        for key in (
-            "dollar_based_amount",
-            "requested_notional_amount",
-            "total_notional",
-            "executed_notional",
-        ):
-            value = payload.get(key)
-            data[key] = MoneyAmount.from_json(value) if value else None
+        data = cls._filter_dict(payload, *cls._dataclass_field_factory())
+        try:
+            data["dollar_based_amount"] = payload["dollar_based_amount"][
+                "amount"
+            ]
+        except (KeyError, ValueError):
+            data["dollar_based_amount"] = 0
         return cls(**data)
 
 
@@ -469,6 +454,11 @@ class OptionOrderHistory(ApiPayloadMixin):
 
         return cls(**data)
 
+    def __str__(self) -> str:
+        str_time = datetime.fromisoformat(self.created_at.replace("Z", ""))
+        str_time = str_time.strftime("%Y-%m-%d %H:%M:%S")
+        return f"{self.direction} {self.chain_symbol}:  {self.quantity} {self.price} {str_time} {self.state}"  # noqa E501
+
 
 @dataclass(slots=True)
 class BidAsk:
@@ -477,6 +467,9 @@ class BidAsk:
     side: Literal["bid", "ask"]
     price: float
     quantity: int
+
+    def __str__(self) -> str:
+        return f"{self.side}: {self.price} x{self.quantity}"
 
 
 @dataclass(frozen=True, slots=True)

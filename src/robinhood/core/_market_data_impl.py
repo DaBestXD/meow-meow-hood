@@ -425,7 +425,9 @@ class MarketDataImpl(TypingBase):
                 )
             return "currency_pair", final_item.id
 
-    async def __resolve_UUID_repr_to_id(self, item: UUID):
+    async def __resolve_UUID_repr_to_id(
+        self, item: UUID
+    ) -> tuple[StrWatchListItem, str] | None:
         checks: list[Callable[[str], Awaitable[object | None]]] = [
             # Future quote endpoint already works with UUID
             # doesnt need its own check function

@@ -6,7 +6,11 @@ from typing import Any
 import aiohttp
 
 from robinhood.constants import BASE_API_LINK, RESULTS
-from robinhood.errors import AuthenticationError, EndpointNotFoundError
+from robinhood.errors import (
+    AuthenticationError,
+    EndpointNotFoundError,
+    RateLimitError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +46,7 @@ class RobinhoodAsyncHTTPClient:
             raise EndpointNotFoundError(f"{endpoint}, {status_code}")
         if status_code == 429:
             logger.warning("429 error returned, you are being rate limited.")
-            # TODO: change this to a hardblock maybe sleep for a minute?
-            raise NotImplementedError(f"{endpoint}, {status_code}")
+            raise RateLimitError(f"{endpoint}, {status_code}")
         if status_code == 403 or status_code == 401:
             logger.critical("Access token invalid, relogin into robinhood")
             raise AuthenticationError(
@@ -73,7 +76,11 @@ class RobinhoodAsyncHTTPClient:
             )
         return self.session
 
-    async def _page_get(self, endpoint: str, results: list[dict]) -> list[dict]:
+    async def _page_get(
+        self,
+        endpoint: str,
+        results: list[dict],
+    ) -> list[dict]:
         session = await self.create_client_session()
         while True:
             logger.debug(

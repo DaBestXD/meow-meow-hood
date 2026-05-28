@@ -247,7 +247,7 @@ class AccountImpl(TypingBase):
         to long. Robinhood does not support adding multi-leg option
         strategies to the option watchlist, and only the option watchlist
         can add options.
-        Note for there is some name mismatching if you use BTC-USD with
+        Note: for there is some name mismatching if you use BTC-USD with
         futures endpoint to specify crypto/currency_pair use a hyphen to
         designate so.
         """
