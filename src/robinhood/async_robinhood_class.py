@@ -115,7 +115,11 @@ class AsyncRobinhood(_CoreRobinhood):
         return await self._get_stock_quotes(symbols)
 
     async def get_currency_quote(self, symbol: str) -> CurrencyQuote | None:
-        """TODO: add docstring later"""
+        """
+        Get a currency quote works for forex/crypto
+        Not case sensitive and denotes price in USD.
+        Example: 'EUR', 'btc', 'eth
+        """
         return await self._get_currency_quote(symbol)
 
     async def get_orderbook(self, symbol: str) -> OrderBook | None:
@@ -229,9 +233,10 @@ class AsyncRobinhood(_CoreRobinhood):
     ) -> StockOrderResponse | None:
         """
         Place a limit stock order.
-
-        Provide `quantity` for a share-based order. `market_hours` defaults to
-        regular hours and `time_in_force` defaults to `gtc`.
+        Provide `quantity` for a share-based order.
+        Provide `dollar_based_amount` for dollar based order.
+        Errors that should be raised are MalformedOrder,
+        Using both will raise a malformedorder error,
         """
         return await self._place_limit_stock_order(
             symbol,
@@ -258,7 +263,8 @@ class AsyncRobinhood(_CoreRobinhood):
     ) -> StockOrderResponse | None:
         """
         Place a market stock order.
-
+        Errors that should be raised are malformedorder,
+        Using both will raise a MalformedOrder error,
         Use either `dollar_based_amount` or `quantity`. `market_hours` defaults
         to regular hours and `time_in_force` defaults to `gtc`.
         """
@@ -321,7 +327,7 @@ class AsyncRobinhood(_CoreRobinhood):
         self,
         watchlist_name: str,
     ) -> WatchList | None:
-        """TODO: add docstring later"""
+        """Return a watchlist by name"""
         return await self._get_watchlist_by_name(watchlist_name)
 
     async def create_watchlist(
@@ -346,7 +352,16 @@ class AsyncRobinhood(_CoreRobinhood):
         item: str,
         watchlist_name: str,
     ) -> dict | None:
-        """Add an equity symbol to a Robinhood watchlist."""
+        """
+        Accepts symbol name such as "SPY" or UUID of the instrument
+        Add an equity symbol to a Robinhood watchlist.
+        Option strategies can only be added to the robinhood's default
+        option watchlist, and only with the option UUID
+        Will raise FailedToModifyWatchlistError if item failed to add.
+        Reason for failure to add include:
+        - Item already exists in the list
+        - Invalid symbol or UUID
+        """
         return await self._add_item_to_watchlist(
             item,
             watchlist_name,
@@ -357,7 +372,13 @@ class AsyncRobinhood(_CoreRobinhood):
         item: str,
         watchlist_name: str,
     ) -> dict | None:
-        """Remove an item from a Robinhood watchlist."""
+        """
+        Accepts symbol name such as "SPY" or UUID
+        will raise an FailedToModifyWatchlistError if item fails to delete
+        Reason for failure to add include:
+        - Item doesn't exist in the list
+        - Invalid symbol or UUID
+        """
         return await self._remove_item_from_watchlist(
             item,
             watchlist_name,

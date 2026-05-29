@@ -311,7 +311,6 @@ class StockOrder(ApiPayloadMixin):
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> Self:
         """Create a stock order row and normalize notional price data."""
-        print(payload)
         data = cls._filter_dict(payload, *cls._dataclass_field_factory())
         total_notional = payload.get("total_notional") or {}
         data["price"] = float(total_notional.get("amount", 0.0) or 0.0)

@@ -2,8 +2,7 @@ import argparse
 import time
 from bisect import bisect_left
 
-from robinhood import OptionRequest, Robinhood
-from robinhood.api_dataclasses import OptionGreekData
+from robinhood import OptionGreekData, OptionRequest, Robinhood
 
 
 def cmd_args() -> argparse.Namespace:

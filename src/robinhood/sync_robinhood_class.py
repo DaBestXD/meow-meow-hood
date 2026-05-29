@@ -111,7 +111,11 @@ class Robinhood(_CoreRobinhood):
         return self._run(self._get_stock_quotes(symbol))
 
     def get_currency_quote(self, symbol: str) -> CurrencyQuote | None:
-        """TODO: add docstring later"""
+        """
+        Get a currency quote works for forex/crypto
+        Not case sensitive and denotes price in USD.
+        Example: 'EUR', 'btc', 'eth
+        """
         return self._run(self._get_currency_quote(symbol))
 
     def get_orderbook(self, symbol: str) -> OrderBook | None:
@@ -243,7 +247,7 @@ class Robinhood(_CoreRobinhood):
         self,
         watchlist_name: str,
     ) -> WatchList | None:
-        """TODO: add docstring later"""
+        """Return a watchlist by name"""
         return self._run(self._get_watchlist_by_name(watchlist_name))
 
     def create_watchlist(
