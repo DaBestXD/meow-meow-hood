@@ -2,6 +2,7 @@
 
 import logging
 from functools import cache
+from pathlib import Path
 from types import TracebackType
 from typing import Literal, Self, overload
 
@@ -31,6 +32,7 @@ from robinhood.dataclasses.api_dataclasses import (
 from robinhood.dataclasses.watchlist_classes import WatchList
 
 logger = logging.getLogger(__name__)
+SYNC_PATH = Path(__file__).resolve()
 
 
 class Robinhood(_CoreRobinhood):

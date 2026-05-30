@@ -64,7 +64,10 @@ class MarketDataImpl(TypingBase):
     async def _get_stock_info(
         self, symbols: str | list[str]
     ) -> StockInfo | list[StockInfo] | None:
-        """Return stock metadata for one symbol or a list of symbols."""
+        """
+        [Public]
+        Return stock metadata for one symbol or a list of symbols.
+        """
         symbols = uppercase_input(symbols)
         _symbols = symbols
         if isinstance(symbols, list):
@@ -95,7 +98,10 @@ class MarketDataImpl(TypingBase):
         self,
         symbols: str | list[str],
     ) -> list[IndexInfo] | IndexInfo | None:
-        """Return index metadata for one symbol or a list of symbols."""
+        """
+        [Public]
+        Return index metadata for one symbol or a list of symbols.
+        """
         symbols = uppercase_input(symbols)
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
@@ -122,7 +128,10 @@ class MarketDataImpl(TypingBase):
     async def _get_index_quotes(
         self, symbols: str | list[str]
     ) -> list[IndexQuote] | IndexQuote | None:
-        """Returns IndexQuote classes for one symbol or a list of symbols"""
+        """
+        [Public]
+        Returns IndexQuote classes for one symbol or a list of symbols
+        """
         symbols = uppercase_input(symbols)
         if isinstance(symbols, list):
             symbols = ",".join(symbols)
@@ -157,6 +166,7 @@ class MarketDataImpl(TypingBase):
         self, symbol: list[str] | str
     ) -> InstrumentQuote | list[InstrumentQuote] | None:
         """
+        [Public]
         Returns a list of InstrumentQuote dataclasses
         Ensure symbols are capitalized
         """
@@ -172,6 +182,15 @@ class MarketDataImpl(TypingBase):
         return return_val if len(return_val) > 1 else return_val[0]
 
     async def _get_orderbook(self, symbol: str) -> OrderBook | None:
+        """
+        [Public]
+        Return an OrderBook dataclass
+        Userful attributes:
+        - OrderBook.asks
+        - OrderBook.bids
+        Both are lists of BidAsk dataclasses
+        that contain the price, quanity, and side
+        """
         symbol = uppercase_input(symbol)
         si = await self._get_stock_info(symbol)
         if not si:
@@ -194,6 +213,7 @@ class MarketDataImpl(TypingBase):
     # some faith in the user is required...
     async def _get_future_info(self, symbol: str) -> FuturesProduct | None:
         """
+        [Public]
         This is a convience function that calls `get_all_futures_products`
         and filters for the symbols.
         Symbols should be as follows:
@@ -229,6 +249,7 @@ class MarketDataImpl(TypingBase):
         ids: str | list[str],
     ) -> list[FuturesQuote] | FuturesQuote | None:
         """
+        [Public]
         Accepts either exact symbols such as /ESM26
         or actual contract id
         Using exact symbols has some overhead costs,
@@ -263,6 +284,9 @@ class MarketDataImpl(TypingBase):
     async def _resolve_symbol_to_id(
         self, symbols: str | list[str]
     ) -> dict[str, str]:
+        """
+        [Private]
+        """
         all_futures = await self._get_all_futures_products()
         mapping_symbols_to_ids: dict[str, str] = {}
         if not all_futures:
@@ -284,6 +308,7 @@ class MarketDataImpl(TypingBase):
         self,
     ) -> list[FuturesProduct] | None:
         """
+        [Public]
         Return a list of all Futures Products
         """
         res_json = await self._async_http_client._get(API_FUTURES_PRODUCTS)
@@ -301,6 +326,7 @@ class MarketDataImpl(TypingBase):
         self, id: str
     ) -> list[FuturesContract] | None:
         """
+        [Public]
         Take a future product id and returns all active contracts
         Sorted by earliest expiration
         Contract id can be found from a FuturesProduct's id var
@@ -318,6 +344,10 @@ class MarketDataImpl(TypingBase):
         return future_contracts
 
     async def _get_currency_quote(self, symbol: str) -> CurrencyQuote | None:
+        """
+        [Public]
+        Return a CurrencyQuote dataclass for a symbol such as `BTC, DOGE, EUR`
+        """
         symbol = normalize_currency_input(symbol)
         params = {PARAM_SYMBOLS: symbol}
         res_json = await self._async_http_client._get(
@@ -330,6 +360,7 @@ class MarketDataImpl(TypingBase):
 
     async def __currency_id_check(self, _id: str) -> CurrencyQuote | None:
         """
+        [Private]
         Only accepts UUID
         Not a fully fleshed out endpoint yet
         Just for the check input type function
@@ -344,6 +375,9 @@ class MarketDataImpl(TypingBase):
         return CurrencyQuote.from_json(res_json[0])
 
     async def __instrument_id_check(self, _id: str) -> StockInfo | None:
+        """
+        [Private]
+        """
         params = {PARAM_ID: _id}
         res_json = await self._async_http_client._get(
             endpoint=API_INSTRUMENTS, params=params
@@ -353,6 +387,9 @@ class MarketDataImpl(TypingBase):
         return StockInfo.from_json(res_json[0])
 
     async def __option_id_check(self, _id: str) -> OptionGreekData | None:
+        """
+        [Private]
+        """
         params = {PARAM_ID: _id}
         res_json = await self._async_http_client._get(
             endpoint=API_OPTIONS_GREEKS_DATA, params=params
@@ -362,6 +399,9 @@ class MarketDataImpl(TypingBase):
         return OptionGreekData.from_json(res_json[0])
 
     async def __index_id_check(self, _id: str) -> IndexInfo | None:
+        """
+        [Private]
+        """
         params = {PARAM_ID: _id}
         res_json = await self._async_http_client._get(
             endpoint=API_INDEXES, params=params
@@ -375,6 +415,9 @@ class MarketDataImpl(TypingBase):
     async def __resolve_str_repr_to_id(
         self, item: str
     ) -> tuple[StrWatchListItem, str] | None:
+        """
+        [Private]
+        """
         str_callables: list[Callable[[str], Awaitable[object | None]]] = [
             self._get_stock_quotes,
             self._get_index_quotes,
@@ -428,6 +471,9 @@ class MarketDataImpl(TypingBase):
     async def __resolve_UUID_repr_to_id(
         self, item: UUID
     ) -> tuple[StrWatchListItem, str] | None:
+        """
+        [Private]
+        """
         checks: list[Callable[[str], Awaitable[object | None]]] = [
             # Future quote endpoint already works with UUID
             # doesnt need its own check function
@@ -497,6 +543,7 @@ class MarketDataImpl(TypingBase):
         item: str | UUID,
     ) -> tuple[StrWatchListItem, str] | None:
         """
+        [Private]
         Note: for option_strategies can only be modified with UUID.
         """
         if self._db_cache:

@@ -60,6 +60,7 @@ class AccountImpl(TypingBase):
         self,
     ) -> list[StockPosition] | None:
         """
+        [Public]
         Returns list of StockPosition classes
         """
         if isinstance(self.user_id, int):
@@ -78,7 +79,10 @@ class AccountImpl(TypingBase):
     async def _get_account_option_positions(
         self,
     ) -> list[OptionPosition] | None:
-        """Returns list of OptionPosition classes"""
+        """
+        [Public]
+        Returns list of OptionPosition classes
+        """
         params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
         res_json = await self._async_http_client._get(
             endpoint=API_POSITIONS_OPTIONS,
@@ -93,6 +97,10 @@ class AccountImpl(TypingBase):
     async def _get_option_order_history(
         self,
     ) -> list[OptionOrderHistory] | None:
+        """
+        [Public]
+        Return option order history
+        """
         if isinstance(self.user_id, int):
             return []
         params = {PARAM_ACCOUNT_NUMBER: self.user_id}
@@ -107,7 +115,10 @@ class AccountImpl(TypingBase):
         return option_orders
 
     async def _get_stock_order_history(self) -> list[StockOrder] | None:
-        """Returns a list of StockOrder classes"""
+        """
+        [Public]
+        Returns a list of StockOrder classes
+        """
         if isinstance(self.user_id, int):
             logger.warning("user_id not valid")
             return None
@@ -126,7 +137,10 @@ class AccountImpl(TypingBase):
         self,
         watchlist_name: str,
     ) -> WatchList | None:
-        """Return the watchlist matching a display name."""
+        """
+        [Public]
+        Return the watchlist matching a display name.
+        """
         res_json = await self._async_http_client._get(API_WATCHLIST_DEFAULT)
         if not res_json:
             logger.warning("No watchlists were found.")
@@ -152,6 +166,7 @@ class AccountImpl(TypingBase):
         list_position: int = 0,
     ) -> WatchList:
         """
+        [Public]
         Create a Robinhood watchlist
         Returns the newly created watchlist object
         """
@@ -178,7 +193,10 @@ class AccountImpl(TypingBase):
         self,
         watchlist_name: str,
     ) -> None:
-        """Delete a Robinhood watchlist by display name or id."""
+        """
+        [Public]
+        Delete a Robinhood watchlist by display name or id.
+        """
         watchlist = await self._get_watchlist_by_name(watchlist_name)
         if not watchlist:
             return None
@@ -198,7 +216,10 @@ class AccountImpl(TypingBase):
         item: str,
         watchlist_name: str,
     ) -> dict | None:
-        """Add an equity symbol to a Robinhood watchlist."""
+        """
+        [Public]
+        Add an equity symbol to a Robinhood watchlist.
+        """
         result = await self._watchlist_item_helper_function(
             item, watchlist_name, "create"
         )
@@ -210,7 +231,10 @@ class AccountImpl(TypingBase):
         item: str,
         watchlist_name: str,
     ) -> dict | None:
-        """Remove an item from a Robinhood watchlist"""
+        """
+        [Public]
+        Remove an item from a Robinhood watchlist
+        """
         result = await self._watchlist_item_helper_function(
             item, watchlist_name, "delete"
         )
@@ -223,6 +247,10 @@ class AccountImpl(TypingBase):
         side: Literal["long", "short"],
         method: Literal["create", "delete"],
     ) -> dict[str, Any]:
+        """
+        [Private]
+        Option order form
+        """
         return {
             "legs": [
                 {
@@ -243,6 +271,7 @@ class AccountImpl(TypingBase):
         option_side: Literal["long", "short"] = "long",
     ):
         """
+        [Private]
         If providing an option uuid, option positions defaults
         to long. Robinhood does not support adding multi-leg option
         strategies to the option watchlist, and only the option watchlist
@@ -295,6 +324,7 @@ class AccountImpl(TypingBase):
 
     async def _get_watchlists(self) -> list[WatchList] | None:
         """
+        [Public]
         Returns list of Watchlist classes
         To each item from the watchlist use `watchlist.items`
         This function will always return your options watchlist
@@ -325,6 +355,7 @@ class AccountImpl(TypingBase):
 
     async def _watchlist_helper(self, id: str) -> list[WatchListItem]:
         """
+        [Private]
         Helper function to normalize json into watchlist item classes
         """
         params = {
@@ -359,6 +390,7 @@ class AccountImpl(TypingBase):
         self, raw_json_response: bool = False
     ) -> list[AchTransfer] | list[dict] | None:
         """
+        [Public]
         Returns all ach transfers
         Use `raw_json_response = True` for raw json response
         """
@@ -373,6 +405,7 @@ class AccountImpl(TypingBase):
         self, raw_json_response: bool = False
     ) -> list[RobinhoodAccount] | list[dict] | None:
         """
+        [Public]
         Returns all robinhood accounts
         Use `raw_json_response = True` for raw json response
         """
@@ -383,6 +416,7 @@ class AccountImpl(TypingBase):
 
     def _change_account(self, acc_id: str) -> None:
         """
+        [Public]
         Changing account id will affect where stock/option orders
         are placed
         Sync function

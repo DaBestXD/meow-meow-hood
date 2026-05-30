@@ -43,6 +43,7 @@ class OptionsImpl(TypingBase):
 
     async def _get_expiration_dates(self, symbol: str) -> list[str] | None:
         """
+        [Public]
         Returns option_expiration dates for a given symbol as
         a list of strings, date format in yyyy-mm-dd
         """
@@ -73,6 +74,7 @@ class OptionsImpl(TypingBase):
         self, *, symbol: str, exp_date: str
     ) -> dict[OptionRequest, list[float]]:
         """
+        [Public]
         Returns a dict of OptionRequest and a list of strike prices
         """
         symbol = uppercase_input(symbol)
@@ -155,7 +157,7 @@ class OptionsImpl(TypingBase):
         requests_to_ids: dict[OptionRequest, list[str]],
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         """
-        Private helper function.
+        [Private]
         Fetch greek data in batches and rebuild the request-to-data mapping.
         """
         seen_ids: set[str] = set()
@@ -192,6 +194,7 @@ class OptionsImpl(TypingBase):
         option_requests: list[OptionRequest],
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         """
+        [Public]
         This doesn't check the db_cache for any hits
         and routes through the normal api path of:
         Option Chain Data --> Option Instrument Data --> Option Greek Data
@@ -230,7 +233,7 @@ class OptionsImpl(TypingBase):
         chain_symbol_pair: dict[str, str],
     ) -> list[OptionInstrument]:
         """
-        Private helper function.
+        [Private]
         Fetch option instruments for the given requests and sync cache rows.
         """
         res_json: list[dict] = []
@@ -278,6 +281,7 @@ class OptionsImpl(TypingBase):
         self, symbol: str | list[str]
     ) -> list[OptionChain] | OptionChain | None:
         """
+        [Public]
         Return option chain metadata for one symbol or many symbols.
         Warning this endpoint has a strict limit of ~4 req/s
         """
@@ -317,6 +321,8 @@ class OptionsImpl(TypingBase):
         self, option_ids: list[str]
     ) -> list[OptionGreekData]:
         """
+        Maybe implement this?
+        [Public]
         Takes the list of options ids and returns
         """
         joined_option_ids = ",".join(option_ids)
@@ -340,7 +346,10 @@ class OptionsImpl(TypingBase):
         self,
         option_requests: OptionRequest | list[OptionRequest],
     ) -> dict[OptionRequest, list[OptionGreekData]]:
-        """Return option greek data grouped by the input request objects."""
+        """
+        [Public]
+        Return option greek data grouped by the input request objects.
+        """
         if isinstance(option_requests, OptionRequest):
             option_requests = [option_requests]
         if not self._db_cache:

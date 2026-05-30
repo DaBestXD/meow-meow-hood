@@ -1,6 +1,7 @@
 """Asynchronous public Robinhood client."""
 
 import logging
+from pathlib import Path
 from types import TracebackType
 from typing import Literal, Self, overload
 
@@ -30,6 +31,7 @@ from robinhood.dataclasses.api_dataclasses import (
 from robinhood.dataclasses.watchlist_classes import WatchList
 
 logger = logging.getLogger(__name__)
+ASYNC_PATH = Path(__file__).resolve()
 
 
 class AsyncRobinhood(_CoreRobinhood):

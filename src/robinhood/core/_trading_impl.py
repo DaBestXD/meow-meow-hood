@@ -51,6 +51,10 @@ class TradingImpl(TypingBase):
         currency_code: str = "USD",
         price: float = -1,
     ) -> StockOrderLimit | StockOrderStockAmount | StockOrderDollarAmount:
+        """
+        [Private]
+        TODO: add docstring
+        """
         symbol = uppercase_input(symbol)
         self._malform_order_check(
             side, dollar_based_amount, quantity, s_type, price
@@ -107,6 +111,10 @@ class TradingImpl(TypingBase):
         s_type: Literal["market", "limit"],
         price: float,
     ) -> None:
+        """
+        [Private]
+        TODO: add docstring
+        """
         if s_type == "limit" and price <= 0:
             raise MalformedOrderError("price must be greater than 0")
         if side != "buy" and side != "sell":
@@ -139,6 +147,7 @@ class TradingImpl(TypingBase):
         currency_code: str = "USD",
     ):
         """
+        [Public]
         Defaults to regular_hours use extended_hours when needed.
         Defaults to 'gtc' swap to 'gfd' when needed.
         """
@@ -180,6 +189,7 @@ class TradingImpl(TypingBase):
         currency_code: str = "USD",
     ) -> StockOrderResponse | None:
         """
+        [Public]
         Defaults to regular_hours use extended_hours when needed.
         Defaults to 'gtc' swap to 'gfd' when needed.
         Use either a dollar based amount or stock based amount
@@ -233,6 +243,7 @@ class TradingImpl(TypingBase):
         limit_price: float,
     ) -> OptionOrderResponse | None:
         """
+        [Public]
         This can be used to open/close positions
         Supports multi leg strategies and different leg ratios
         Example of ratio:
@@ -289,14 +300,20 @@ class TradingImpl(TypingBase):
         return OptionOrderResponse.from_json(res_json[0])
 
     async def _cancel_option_order(self, id: str) -> None:
-        """Use option order id from OptionOrderResponse to cancel"""
+        """
+        [Public]
+        Use option order id from OptionOrderResponse to cancel
+        """
         await self._async_http_client._post(
             endpoint=API_OPTION_ORDER + id + "/cancel/"
         )
         return None
 
     async def _cancel_stock_order(self, id: str) -> None:
-        """Use stock order id from StockOrderResponse to cancel"""
+        """
+        [Public]
+        Use stock order id from StockOrderResponse to cancel
+        """
         await self._async_http_client._post(
             endpoint=API_STOCK_ORDER + id + "/cancel/"
         )
