@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from robinhood.async_robinhood_class import ASYNC_PATH
+from robinhood.core import CORE_PATH
 from robinhood.sync_robinhood_class import SYNC_PATH
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ def get_args() -> argparse.Namespace:
         "--files",
         type=str,
         nargs="*",
+        default=[CORE_PATH],
         help="Accepts either files or directories as the input files",
     )
     parser.add_argument(
@@ -110,7 +112,9 @@ def parse_file(file_path: Path) -> list[FunctionType]:
             func_type = "Public"
         normalized_name = "".join(c for c in i.name if c.isalnum())
         if not func_type:
-            raise RuntimeError(f"No private/public marker was for {i.name}({i.lineno})")
+            raise RuntimeError(
+                f"No private/public marker was for {i.name}({i.lineno})"
+            )
         obj = FunctionType(i.name, normalized_name, func_type)
         if obj.func_type == "Public":
             logger.debug(
@@ -148,8 +152,7 @@ def parse_file_path(file_path: Path) -> list[FunctionType]:
     raise RuntimeError("unexpected file was provided")
 
 
-def main() -> None:
-    configure_logger()
+def implementation_checker_func():
     cmd_args = get_args()
     paths: list[str] = cmd_args.files
     exported_funcs: list[str] = []
@@ -177,6 +180,11 @@ def main() -> None:
     for i in target_files:
         check_file_for_function(i, exported_funcs)
         logger.info("%s has full implementation", i.name)
+
+
+def main() -> None:
+    configure_logger()
+    implementation_checker_func()
 
 
 if __name__ == "__main__":
