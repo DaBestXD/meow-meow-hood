@@ -13,34 +13,35 @@ from robinhood.sync_robinhood_class import SYNC_PATH
 logger = logging.getLogger(__name__)
 
 
-def configure_logger() -> None:
+def configure_logger(debug_level: int = logging.DEBUG) -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(debug_level)
     logger.addHandler(handler)
 
 
-@dataclass
+@dataclass(frozen=True)
 class FunctionType:
     raw_func_name: str
     func_name: str
     func_type: Literal["Private", "Public"]
+    func_origin: str
 
 
-IGNORE_FUNC_LIST = [
+IGNORE_FUNC_LIST: set[str] = {
     "__enter__",
     "__exit__",
     "__aenter__",
     "__aexit__",
     "__init__",
     "close",
-]
-IGNORED_FILES: list[str] = [
+}
+IGNORED_FILES: set[str] = {
     "__init__.py",
     "__pycache__",
     "_core_robinhood.py",
     "_http_async_client.py",
-]
+}
 
 
 def get_args() -> argparse.Namespace:
@@ -60,35 +61,52 @@ def get_args() -> argparse.Namespace:
         default=[SYNC_PATH, ASYNC_PATH],
         help="Accepts multiple paths to files",
     )
+    parser.add_argument(
+        "--debug_level",
+        type=int,
+        default=logging.INFO,
+        help="Accepted Values: (10: DEBUG), (20: INFO), (30: WARNING), (40: ERROR), (50: CRITICAL)",  # noqa: E501
+    )
     return parser.parse_args()
 
 
 def check_file_for_function(
     file_path: Path,
-    exported_funcs: list[str],
+    exported_funcs: list[FunctionType],
 ):
     f = open(file_path, "r")
     mod = ast.parse(f.read())
-    set_funcs = set(exported_funcs)
+    f.close()
+    set_funcs_names = {f.func_name: f for f in exported_funcs}
     for i in ast.walk(mod):
         if not isinstance(i, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if i.name in IGNORE_FUNC_LIST:
             continue
-        deco = [e.id for e in i.decorator_list if e.id == "overload"]
+        deco: bool = False
+        for d in i.decorator_list:
+            if isinstance(d, ast.Name) and d.id == "overload":
+                deco = True
+                break
         if deco:
             continue
         normalized_name = "".join((c for c in i.name if c.isalnum()))
         try:
-            set_funcs.remove(normalized_name)
+            set_funcs_names.pop(normalized_name)
         except KeyError:
             raise NotImplementedError(
                 f"Missing {i.name}({i.lineno}) for {file_path.name}"
             )
-    if set_funcs:
-        for s in set_funcs:
-            logger.warning("Function was not implemented: %s", s)
+    if set_funcs_names:
+        for _, v in set_funcs_names.items():
+            logger.warning(
+                "Missing implementation for %s %s(function origin: %s) ",
+                file_path.name,
+                v.raw_func_name,
+                v.func_origin,
+            )
         raise RuntimeWarning("Not all functions were implemented")
+    logger.info("%s has no missing implementations", file_path.name)
 
 
 def parse_file(file_path: Path) -> list[FunctionType]:
@@ -98,7 +116,11 @@ def parse_file(file_path: Path) -> list[FunctionType]:
     for i in ast.walk(mod):
         if not isinstance(i, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        deco = [e.id for e in i.decorator_list if e.id == "overload"]
+        deco: bool = False
+        for d in i.decorator_list:
+            if isinstance(d, ast.Name) and d.id == "overload":
+                deco = True
+                break
         if deco:
             continue
         doc_string = ast.get_docstring(i)
@@ -115,10 +137,15 @@ def parse_file(file_path: Path) -> list[FunctionType]:
             raise RuntimeError(
                 f"No private/public marker was for {i.name}({i.lineno})"
             )
-        obj = FunctionType(i.name, normalized_name, func_type)
+        obj = FunctionType(
+            i.name,
+            normalized_name,
+            func_type,
+            file_path.name,
+        )
         if obj.func_type == "Public":
             logger.debug(
-                "Exporting %s from %s",
+                "Public %s from %s",
                 obj.raw_func_name,
                 file_path.name,
             )
@@ -129,7 +156,7 @@ def parse_file(file_path: Path) -> list[FunctionType]:
 
 def parse_dir(
     dir_path: Path,
-    ignored_files: list[str] = IGNORED_FILES,
+    ignored_files: set[str] = IGNORED_FILES,
 ) -> list[Path]:
     files: list[Path] = []
     for f in os.scandir(dir_path):
@@ -154,38 +181,25 @@ def parse_file_path(file_path: Path) -> list[FunctionType]:
 
 def implementation_checker_func():
     cmd_args = get_args()
+    configure_logger(cmd_args.debug_level)
     paths: list[str] = cmd_args.files
-    exported_funcs: list[str] = []
+    exported_funcs: list[FunctionType] = []
     if not paths:
         raise RuntimeError("file path was none")
     if len(paths) > 1:
         for i in paths:
             exported_funcs.extend(
-                [
-                    f.func_name
-                    for f in parse_file_path(Path(i))
-                    if f.func_type == "Public"
-                ]
+                [f for f in parse_file_path(Path(i)) if f.func_type == "Public"]
             )
     else:
         file = Path(paths[0])
         exported_funcs.extend(
-            [
-                f.func_name
-                for f in parse_file_path(Path(file))
-                if f.func_type == "Public"
-            ]
+            [f for f in parse_file_path(Path(file)) if f.func_type == "Public"]
         )
     target_files: list[Path] = [Path(f) for f in cmd_args.target_files]
     for i in target_files:
         check_file_for_function(i, exported_funcs)
-        logger.info("%s has full implementation", i.name)
-
-
-def main() -> None:
-    configure_logger()
-    implementation_checker_func()
 
 
 if __name__ == "__main__":
-    main()
+    implementation_checker_func()

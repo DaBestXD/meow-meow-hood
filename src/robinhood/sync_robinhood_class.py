@@ -210,6 +210,14 @@ class Robinhood(_CoreRobinhood):
         """Return option chain metadata for one symbol or many symbols."""
         return self._run(self._get_option_chain_data(symbol))
 
+    def get_option_greek_data(
+        self, option_ids: list[str]
+    ) -> list[OptionGreekData]:
+        """
+        Takes a list of options UUIDs and returns a list of OptionGreekData
+        """
+        return self._run(self._get_option_greek_data(option_ids))
+
     def get_option_greeks_batch_request(
         self,
         option_requests: OptionRequest | list[OptionRequest],
