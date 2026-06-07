@@ -2,10 +2,13 @@ import subprocess
 
 
 def main() -> None:
-    subprocess.run(["ruff", "format"])
-    subprocess.run(["ruff", "check", "--fix"])
-    subprocess.run(["uv", "run", "-m", "unittest", "discover"])
-    subprocess.run(["uv", "run", "scripts/implementation_checker.py"])
+    subprocess.run(["ruff", "format"], check=True)
+    subprocess.run(["ruff", "check", "--fix"], check=True)
+    subprocess.run(["uv", "run", "-m", "unittest", "discover"], check=True)
+    subprocess.run(
+        ["uv", "run", "-m", "scripts.implementation_checker"],
+        check=True,
+    )
 
 
 if __name__ == "__main__":
