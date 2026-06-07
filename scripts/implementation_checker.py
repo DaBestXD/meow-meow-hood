@@ -2,13 +2,13 @@ import argparse
 import ast
 import logging
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from robinhood.async_robinhood_class import ASYNC_PATH
 from robinhood.core import CORE_PATH
 from robinhood.sync_robinhood_class import SYNC_PATH
+from scripts.blah_typing import AstFunctionType
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +20,30 @@ def configure_logger(debug_level: int = logging.DEBUG) -> None:
     logger.addHandler(handler)
 
 
-@dataclass(frozen=True)
 class FunctionType:
-    raw_func_name: str
-    func_name: str
-    func_type: Literal["Private", "Public"]
-    func_origin: str
+    def __init__(
+        self,
+        raw_func_name: str,
+        func_name: str,
+        func_type: Literal["Private", "Public"],
+        func_origin: Path,
+        node: AstFunctionType,
+        func_missing_from: Path | None = None,
+    ) -> None:
+        self.raw_func_name = raw_func_name
+        self.func_name = func_name
+        self.func_type = func_type
+        self.func_origin = func_origin
+        self.func_missing_from = func_missing_from
+        self.node = node
+        self.overload_impl: list[AstFunctionType] = []
+
+    def __str__(self) -> str:
+        return f"{self.raw_func_name}({self.func_origin.name})"
+
+    def __repr__(self) -> str:
+        class_vars = [f"{k}={v}" for k, v in self.__dict__.items()]
+        return f"{self.__class__.__name__}({', '.join(class_vars)})"
 
 
 IGNORE_FUNC_LIST: set[str] = {
@@ -79,7 +97,7 @@ def check_file_for_function(
     f.close()
     set_funcs_names = {f.func_name: f for f in exported_funcs}
     for i in ast.walk(mod):
-        if not isinstance(i, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if not isinstance(i, AstFunctionType):
             continue
         if i.name in IGNORE_FUNC_LIST:
             continue
@@ -98,20 +116,35 @@ def check_file_for_function(
                 f"Missing {i.name}({i.lineno}) for {file_path.name}"
             )
     if set_funcs_names:
-        for _, v in set_funcs_names.items():
+        for k, v in set_funcs_names.items():
+            set_funcs_names[k].func_missing_from = file_path
             logger.warning(
                 "Missing implementation for %s %s(function origin: %s) ",
                 file_path.name,
                 v.raw_func_name,
-                v.func_origin,
+                v.func_origin.name,
             )
-        raise RuntimeWarning("Not all functions were implemented")
-    logger.info("%s has no missing implementations", file_path.name)
+    if not set_funcs_names:
+        logger.info("%s has no missing implementations", file_path.name)
+    return set_funcs_names
+
+
+def parse_file_for_overloads(file_path: Path) -> list[AstFunctionType]:
+    mod = ast.parse(file_path.read_text())
+    overloaded_functions: list[AstFunctionType] = []
+    for i in ast.walk(mod):
+        if not isinstance(i, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        # Only overload is used as decorator, ast.Name check not needed
+        if not [d for d in i.decorator_list if d.id == "overload"]:  # pyright: ignore
+            continue
+        overloaded_functions.append(i)
+    return overloaded_functions
 
 
 def parse_file(file_path: Path) -> list[FunctionType]:
-    f = open(file_path, "r")
-    mod = ast.parse(f.read())
+    mod = ast.parse(file_path.read_text())
     functions: list[FunctionType] = []
     for i in ast.walk(mod):
         if not isinstance(i, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -121,8 +154,6 @@ def parse_file(file_path: Path) -> list[FunctionType]:
             if isinstance(d, ast.Name) and d.id == "overload":
                 deco = True
                 break
-        if deco:
-            continue
         doc_string = ast.get_docstring(i)
         if not doc_string:
             continue
@@ -135,13 +166,14 @@ def parse_file(file_path: Path) -> list[FunctionType]:
         normalized_name = "".join(c for c in i.name if c.isalnum())
         if not func_type:
             raise RuntimeError(
-                f"No private/public marker was for {i.name}({i.lineno})"
+                f"No private/public marker was for {i.name}(lineno: {i.lineno})"
             )
         obj = FunctionType(
             i.name,
             normalized_name,
             func_type,
-            file_path.name,
+            file_path,
+            i,
         )
         if obj.func_type == "Public":
             logger.debug(
@@ -149,8 +181,8 @@ def parse_file(file_path: Path) -> list[FunctionType]:
                 obj.raw_func_name,
                 file_path.name,
             )
-        functions.append(obj)
-    f.close()
+        if not deco:
+            functions.append(obj)
     return functions
 
 
@@ -171,7 +203,12 @@ def parse_file_path(file_path: Path) -> list[FunctionType]:
         dir_paths = parse_dir(file_path)
         exported_funcs: list[FunctionType] = []
         for f in dir_paths:
-            exported_funcs.extend(parse_file(f))
+            funcs = parse_file(f)
+            for i in funcs:
+                for u in parse_file_for_overloads(f):
+                    if i.raw_func_name == u.name:
+                        i.overload_impl.append(u)
+            exported_funcs.extend(funcs)
         return exported_funcs
     if file_path.is_file():
         exported_funcs = parse_file(file_path)
@@ -179,10 +216,8 @@ def parse_file_path(file_path: Path) -> list[FunctionType]:
     raise RuntimeError("unexpected file was provided")
 
 
-def implementation_checker_func():
-    cmd_args = get_args()
-    configure_logger(cmd_args.debug_level)
-    paths: list[str] = cmd_args.files
+def implementation_checker_func(files: list[str], target_files: list[str]):
+    paths: list[str] = files
     exported_funcs: list[FunctionType] = []
     if not paths:
         raise RuntimeError("file path was none")
@@ -196,10 +231,20 @@ def implementation_checker_func():
         exported_funcs.extend(
             [f for f in parse_file_path(Path(file)) if f.func_type == "Public"]
         )
-    target_files: list[Path] = [Path(f) for f in cmd_args.target_files]
-    for i in target_files:
-        check_file_for_function(i, exported_funcs)
+    path_target_files = [Path(f) for f in target_files]
+    total_missing: list[FunctionType] = []
+    for i in path_target_files:
+        vals = check_file_for_function(i, exported_funcs)
+        if vals:
+            total_missing.append(*vals.values())
+    return total_missing
 
 
 if __name__ == "__main__":
-    implementation_checker_func()
+    cmd_args = get_args()
+    missing = implementation_checker_func(cmd_args.files, cmd_args.target_files)
+    configure_logger(cmd_args.debug_level)
+    if missing:
+        raise RuntimeError(f"Missing impl for: {missing}")
+    else:
+        print("No missing implementations!")
