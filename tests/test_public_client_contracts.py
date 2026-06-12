@@ -39,7 +39,7 @@ def build_async_public_client(
         ),
         db_cache=db_cache,
     )
-    client.user_id = "ACC123"
+    client.acc_id = "ACC123"
     return client
 
 
@@ -291,7 +291,7 @@ class TestSyncRobinhoodPublicContracts:
             http_client=SimpleNamespace(close=AsyncMock()),
             db_cache=db_cache,
         )
-        client.user_id = "ACC123"
+        client.acc_id = "ACC123"
         return self.track_client(client)
 
     def test_sync_context_manager_exits_through_close(self) -> None:
@@ -378,4 +378,4 @@ class TestSyncRobinhoodPublicContracts:
         result = client.change_account("ACC456")
 
         assert result is None
-        assert "ACC456" == client.user_id
+        assert "ACC456" == client.acc_id

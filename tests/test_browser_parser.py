@@ -13,10 +13,10 @@ from robinhood.browser_functions.browser_token_parser import (
     DB_PATH,
     Chrome,
     Firefox,
-    _chrome_log_file_path,
     _close_process,
     _decode_jwt,
-    _get_firefox_profile_path,
+    _get_firefox_profile_token_and_id,
+    _parse_log_file_for_path_token_id,
     get_acc_id,
 )
 from robinhood.robinhood_errors import AuthenticationError, TokenExtractionError
@@ -68,7 +68,13 @@ class TestBrowserTokenParser:
         )
         mock_get_acc_id.return_value = "ACC123"
 
-        assert log_file == _chrome_log_file_path(tmp_path)
+        parsed_log_file, parsed_token, parsed_acc_id = (
+            _parse_log_file_for_path_token_id(tmp_path)
+        )
+
+        assert log_file == parsed_log_file
+        assert valid_token == parsed_token
+        assert "ACC123" == parsed_acc_id
         mock_get_acc_id.assert_called_once_with(valid_token)
 
     @patch(
@@ -82,7 +88,7 @@ class TestBrowserTokenParser:
         write_chrome_log(tmp_path, valid_token)
 
         with pytest.raises(TokenExtractionError):
-            _chrome_log_file_path(tmp_path)
+            _parse_log_file_for_path_token_id(tmp_path)
 
     @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
     def test_chrome_get_token_skips_rejected_tokens(
@@ -120,7 +126,13 @@ class TestBrowserTokenParser:
         profile_path = write_firefox_auth_state(tmp_path, valid_token)
         mock_get_acc_id.return_value = "ACC123"
 
-        assert profile_path == _get_firefox_profile_path(tmp_path)
+        parsed_profile_path, parsed_token, parsed_acc_id = (
+            _get_firefox_profile_token_and_id(tmp_path)
+        )
+
+        assert profile_path == parsed_profile_path
+        assert valid_token == parsed_token
+        assert "ACC123" == parsed_acc_id
         mock_get_acc_id.assert_called_once_with(valid_token)
 
     def test_firefox_profile_path_raises_for_stale_token(
@@ -130,7 +142,7 @@ class TestBrowserTokenParser:
         write_firefox_auth_state(tmp_path, expired_token)
 
         with pytest.raises(TokenExtractionError, match="stale token"):
-            _get_firefox_profile_path(tmp_path)
+            _get_firefox_profile_token_and_id(tmp_path)
 
     @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
     def test_firefox_get_token_returns_validated_token(

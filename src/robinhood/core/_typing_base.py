@@ -19,7 +19,7 @@ class TypingBase:
     """Attributes and method shapes shared by implementation mixins."""
 
     def __init__(self) -> None:
-        self.user_id: int | str
+        self.acc_id: int | str
         self._async_http_client: RobinhoodAsyncHTTPClient
         self._db_cache: OptionCache | None
 

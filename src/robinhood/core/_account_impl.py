@@ -65,9 +65,9 @@ class AccountImpl(TypingBase):
         [Public]
         Returns list of StockPosition classes
         """
-        if isinstance(self.user_id, int):
+        if isinstance(self.acc_id, int):
             return None
-        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
+        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.acc_id}
         res_json = await self._async_http_client._get(
             endpoint=API_POSITIONS_NON_OPTIONS,
             params=params,
@@ -85,7 +85,7 @@ class AccountImpl(TypingBase):
         [Public]
         Returns list of OptionPosition classes
         """
-        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.user_id}
+        params = {PARAM_NON_ZERO: "true", PARAM_ACCOUNT_NUMBER: self.acc_id}
         res_json = await self._async_http_client._get(
             endpoint=API_POSITIONS_OPTIONS,
             params=params,
@@ -103,9 +103,9 @@ class AccountImpl(TypingBase):
         [Public]
         Return option order history
         """
-        if isinstance(self.user_id, int):
+        if isinstance(self.acc_id, int):
             return []
-        params = {PARAM_ACCOUNT_NUMBER: self.user_id}
+        params = {PARAM_ACCOUNT_NUMBER: self.acc_id}
         res_json = await self._async_http_client._get(
             endpoint=API_OPTION_ORDER_HISTORY,
             params=params,
@@ -121,10 +121,10 @@ class AccountImpl(TypingBase):
         [Public]
         Returns a list of StockOrder classes
         """
-        if isinstance(self.user_id, int):
+        if isinstance(self.acc_id, int):
             logger.warning("user_id not valid")
             return None
-        params = {PARAM_ACCOUNT_NUMBER: self.user_id}
+        params = {PARAM_ACCOUNT_NUMBER: self.acc_id}
         res_json = await self._async_http_client._get(
             endpoint=API_NON_OPTION_ORDER_HISTORY,
             params=params,
@@ -445,7 +445,7 @@ class AccountImpl(TypingBase):
         are placed
         Sync function
         """
-        self.user_id = acc_id
+        self.acc_id = acc_id
         return None
 
     async def _get_account_value_impl(
@@ -456,7 +456,7 @@ class AccountImpl(TypingBase):
         Uses the classes' self.user_id if acc_id is not provided
         Returns an AccountValue dataclass
         """
-        acc = self.user_id if not acc_id else acc_id
+        acc = self.acc_id if not acc_id else acc_id
         res_json = await self._async_http_client._get(
             API_ACCOUNT_LIVE + f"{acc}/live", BASE_API_BONFIRE_LINK
         )

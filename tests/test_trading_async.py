@@ -55,7 +55,7 @@ class TestTradingAsync:
         client = build_async_robinhood_client(
             http_client=SimpleNamespace(_post=AsyncMock())
         )
-        client.user_id = "ACC123"
+        client.acc_id = "ACC123"
         return self.track_client(client)
 
     def set_market_lookup_success(self, client: AsyncRobinhood) -> None:
@@ -94,7 +94,7 @@ class TestTradingAsync:
 
     async def test_market_stock_order_requires_valid_account_id(self) -> None:
         client = self.make_client()
-        client.user_id = 403
+        client.acc_id = 403
 
         with pytest.raises(AccountIdNotFoundError):
             await client._place_market_stock_order(

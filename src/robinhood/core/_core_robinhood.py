@@ -57,7 +57,7 @@ class _CoreRobinhood(
     def __init__(
         self,
         *,
-        config_path: str | os.PathLike[str] = Path.cwd(),
+        config_path: os.PathLike[str] | Path = Path.cwd(),
         user_agent: str | None = None,
         enable_cache: bool = True,
         prune_expired_options: bool = True,
@@ -77,10 +77,10 @@ class _CoreRobinhood(
         """
         configure_logger(logging_level, log_handler)
         self.browser_type = browser_type()
-        token = self.browser_type.get_token()
+        token = self.browser_type._extracted_token
         if not token:
             raise TokenExtractionError("Bearer token cannot be none.")
-        self.user_id = self.browser_type.acc_id
+        self.acc_id = self.browser_type.acc_id
         if enable_cache:
             config_dir = set_up(Path(config_path))
             cache_path = config_dir / "meow-meow-hood.db"

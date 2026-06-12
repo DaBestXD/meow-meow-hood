@@ -58,6 +58,7 @@ class Browser(Protocol):
     mac_db_path: Path
     _file_to_stat_check: Path
     acc_id: str
+    _extracted_token: str
 
     def open_and_close_browser(
         self,
@@ -86,27 +87,33 @@ class Firefox:
         self.mac_db_path: Path = FIRE_MAC
 
         if sys.platform == "win32":
-            self.firefox_profile_path = _get_firefox_profile_path(
-                self.windows_db_path,
-                raise_err_on_stale_token,
+            self.firefox_profile_path, self._extracted_token, self.acc_id = (
+                _get_firefox_profile_token_and_id(
+                    self.windows_db_path,
+                    raise_err_on_stale_token,
+                )
             )
             self.application_path = Path(
                 r"C:\Program Files\Mozilla Firefox\firefox.exe"
             )
 
         elif sys.platform == "darwin":
-            self.firefox_profile_path = _get_firefox_profile_path(
-                self.mac_db_path,
-                raise_err_on_stale_token,
+            self.firefox_profile_path, self._extracted_token, self.acc_id = (
+                _get_firefox_profile_token_and_id(
+                    self.mac_db_path,
+                    raise_err_on_stale_token,
+                )
             )
             self.application_path = Path(
                 "/Applications/Firefox.app/Contents/MacOS/firefox"
             )
 
         elif sys.platform == "linux":
-            self.firefox_profile_path = _get_firefox_profile_path(
-                self.linux_db_path,
-                raise_err_on_stale_token,
+            self.firefox_profile_path, self._extracted_token, self.acc_id = (
+                _get_firefox_profile_token_and_id(
+                    self.linux_db_path,
+                    raise_err_on_stale_token,
+                )
             )
             self.application_path = Path("/usr/bin/firefox")
 
@@ -273,8 +280,8 @@ class Chrome:
         self.profile_dir: str = profile_dir
 
         if sys.platform == "win32":
-            self.chrome_log_file_path = _chrome_log_file_path(
-                self.windows_db_path
+            self.chrome_log_file_path, self._extracted_token, self.acc_id = (
+                _parse_log_file_for_path_token_id(self.windows_db_path)
             )
             self.application_path = Path(
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -285,7 +292,9 @@ class Chrome:
             self.data_dir = Path(app_data) / "Google/Chrome/User Data"
 
         elif sys.platform == "darwin":
-            self.chrome_log_file_path = _chrome_log_file_path(self.mac_db_path)
+            self.chrome_log_file_path, self._extracted_token, self.acc_id = (
+                _parse_log_file_for_path_token_id(self.mac_db_path)
+            )
             self.application_path = Path(
                 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
             )
@@ -294,8 +303,8 @@ class Chrome:
             )
 
         elif sys.platform.startswith("linux"):
-            self.chrome_log_file_path = _chrome_log_file_path(
-                self.linux_db_path
+            self.chrome_log_file_path, self._extracted_token, self.acc_id = (
+                _parse_log_file_for_path_token_id(self.linux_db_path)
             )
             self.application_path = Path("/usr/bin/google-chrome")
             self.data_dir = HOME_DIR / ".config/google-chrome"
@@ -491,10 +500,10 @@ def _close_firefox_profile_lock(profile_path: Path) -> None:
     return None
 
 
-def _get_firefox_profile_path(
+def _get_firefox_profile_token_and_id(
     f: Path,
     raise_err_on_stale_token: bool = True,
-) -> Path:
+) -> tuple[Path, str, str]:
     """
     Parses firefox profiles folder for a valid token then returns the
     profile filepath.
@@ -524,8 +533,8 @@ def _get_firefox_profile_path(
                     if raise_err_on_stale_token:
                         raise TokenExtractionError("stale token was retrieved")
                 # run a test to see if the token is valid
-                get_acc_id(access_token)
-                return n
+                id = get_acc_id(access_token)
+                return n, access_token, id
             finally:
                 con.close()
         except sqlite3.OperationalError:
@@ -533,9 +542,9 @@ def _get_firefox_profile_path(
     raise TokenExtractionError("unable to find a valid token")
 
 
-def _chrome_log_file_path(db_path: Path) -> Path:
+def _parse_log_file_for_path_token_id(db_path: Path) -> tuple[Path, str, str]:
     """
-    Search a .log file for a possible token
+    Returns Path to .log file, token, and account id
     """
     for n in db_path.iterdir():
         if ".log" not in n.name:
@@ -552,10 +561,10 @@ def _chrome_log_file_path(db_path: Path) -> Path:
                 continue
             if payload.get("exp", 0) > int(time.time()):
                 try:
-                    get_acc_id(t)
+                    id = get_acc_id(t)
                 except AuthenticationError:
                     continue
-                return n
+                return n, t, id
     raise TokenExtractionError("unable to find a valid token")
 
 

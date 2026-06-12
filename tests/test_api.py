@@ -245,7 +245,7 @@ class TestAsyncRobinhoodAPI:
 
     async def test_get_account_option_positions_parses_payloads(self) -> None:
         client = self._track_loop(build_async_api_client())
-        client.user_id = "ACC123"
+        client.acc_id = "ACC123"
         payload = build_option_position_payload()
         client._async_http_client._get.return_value = [payload]
 
@@ -264,7 +264,7 @@ class TestAsyncRobinhoodAPI:
         self,
     ) -> None:
         client = self._track_loop(build_async_api_client())
-        client.user_id = 403
+        client.acc_id = 403
 
         result = await client.get_option_order_history()
 
@@ -276,7 +276,7 @@ class TestAsyncRobinhoodAPI:
         caplog,
     ) -> None:
         client = self._track_loop(build_async_api_client())
-        client.user_id = 403
+        client.acc_id = 403
 
         with caplog.at_level(
             "WARNING",

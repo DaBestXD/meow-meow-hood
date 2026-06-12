@@ -66,7 +66,7 @@ class TradingImpl(TypingBase):
         if not quote:
             raise ValueError(f"unable to retrieve quote for {symbol}")
         _stock_dict = {
-            "account": BASE_API_LINK + f"/accounts/{self.user_id}/",
+            "account": BASE_API_LINK + f"/accounts/{self.acc_id}/",
             "instrument": res.url,
             "ref_id": str(uuid4()),
             "market_hours": market_hours,
@@ -127,7 +127,7 @@ class TradingImpl(TypingBase):
             )
         if dollar_based_amount and quantity:
             raise MalformedOrderError("only one amount value accepted")
-        if isinstance(self.user_id, int):
+        if isinstance(self.acc_id, int):
             raise AccountIdNotFoundError(
                 "no valid account id was found at startup"
             )
@@ -283,7 +283,7 @@ class TradingImpl(TypingBase):
                 }
             )
         opt_order = OptionOrder(
-            account=BASE_API_LINK + f"accounts/{self.user_id}",
+            account=BASE_API_LINK + f"accounts/{self.acc_id}",
             legs=legs,
             ref_id=str(uuid4()),
             direction=order_type,

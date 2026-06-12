@@ -18,6 +18,7 @@ class FakeBrowser:
 
     def __init__(self) -> None:
         self._file_to_stat_check = Path("unused")
+        self._extracted_token = self.token
         self.get_token_mock = Mock(return_value=self.token)
         self.last_accessed_greater_than_n_days_mock = Mock(return_value=False)
         self.open_and_close_browser_mock = Mock()
@@ -73,10 +74,10 @@ class TestCoreRobinhoodInit:
             )
 
         self.track_client(client)
-        assert "ACC123" == client.user_id
+        assert "ACC123" == client.acc_id
         assert isinstance(client.browser_type, FakeBrowser)
         assert cache is client._db_cache
-        client.browser_type.get_token_mock.assert_called_once_with()
+        client.browser_type.get_token_mock.assert_not_called()
         mock_set_up.assert_called_once_with(Path("/tmp"))
         mock_option_cache.assert_called_once_with(
             config_dir / "meow-meow-hood.db",
