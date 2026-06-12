@@ -12,7 +12,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -256,13 +256,30 @@ class Firefox:
             )
         return None
 
+    # TODO: no need to have repeating work under both class change to one helper
+    # function and add the file to check as the param
+    # Example: _helper_last_accessed_greater_than_n_days(days, file_to_check)
     def last_accessed_greater_than_n_days(self, days: int = 1) -> bool:
         last_accessed = self._file_to_stat_check.stat().st_mtime
-        last_mod = (
-            datetime.now(timezone.utc)
-            - datetime.fromtimestamp(last_accessed, timezone.utc)
-        ).days
-        return last_mod > days
+        last_accessed_at = datetime.fromtimestamp(last_accessed, timezone.utc)
+        stale_at = last_accessed_at + timedelta(days=days)
+        now = datetime.now(timezone.utc)
+
+        is_stale = now > stale_at
+        if is_stale:
+            logger.debug(
+                "Browser auth file has not been accesed in %d days", days
+            )
+        else:
+            remaining = stale_at - now
+            hours = remaining.total_seconds() / 3600
+            logger.debug(
+                "Browser auth file will be stale in %.1f hours (%d day threshold)",  # noqa E501
+                hours,
+                days,
+            )
+
+        return is_stale
 
 
 class Chrome:
@@ -417,13 +434,30 @@ class Chrome:
                 _close_firefox_profile_lock(self.path_to_profile_dir)
         return None
 
+    # TODO: no need to have repeating work under both class change to one helper
+    # function and add the file to check as the param
+    # Example: _helper_last_accessed_greater_than_n_days(days, file_to_check)
     def last_accessed_greater_than_n_days(self, days: int = 1) -> bool:
         last_accessed = self._file_to_stat_check.stat().st_mtime
-        last_mod = (
-            datetime.now(timezone.utc)
-            - datetime.fromtimestamp(last_accessed, timezone.utc)
-        ).days
-        return last_mod > days
+        last_accessed_at = datetime.fromtimestamp(last_accessed, timezone.utc)
+        stale_at = last_accessed_at + timedelta(days=days)
+        now = datetime.now(timezone.utc)
+
+        is_stale = now > stale_at
+        if is_stale:
+            logger.debug(
+                "Browser auth file has not been accesed in %d days", days
+            )
+        else:
+            remaining = stale_at - now
+            hours = remaining.total_seconds() / 3600
+            logger.debug(
+                "Browser auth file will be stale in %.1f hours (%d day threshold)",  # noqa E501
+                hours,
+                days,
+            )
+
+        return is_stale
 
 
 def _close_process(
