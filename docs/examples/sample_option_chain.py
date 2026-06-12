@@ -2,7 +2,8 @@ import argparse
 import time
 from bisect import bisect_left
 
-from robinhood import OptionGreekData, OptionRequest, Robinhood
+from robinhood import OptionGreekData, OptionRequest, Robinhood, RobinhoodError
+from robinhood.robinhood_errors import EndpointNotFoundError
 
 
 def cmd_args() -> argparse.Namespace:
@@ -27,9 +28,15 @@ def main() -> None:
     symbol = str(args.symbol).upper()
     selected_date = return_date(rh, symbol, int(args.date))
     strikes = rh.get_strike_prices(symbol=symbol, exp_date=selected_date)
+    if strikes is None:
+        raise ValueError("Strikes returned none")
+    if isinstance(strikes, tuple):
+        strike_lists = strikes
+    else:
+        strike_lists = (strikes, strikes)
     main_loop(
         rh,
-        [*strikes.values()],
+        strike_lists,
         symbol,
         int(args.range),
         selected_date,
@@ -39,24 +46,27 @@ def main() -> None:
 
 def option_range(
     quote_price: float,
-    strikes: list[float],
+    call_strikes: list[float],
+    put_strikes: list[float],
     symbol: str,
     date: str,
     strike_range: int,
 ) -> tuple[list[OptionRequest], list[OptionRequest]]:
-    idx = bisect_left(strikes, quote_price)
-    option_slice = slice(idx - strike_range, idx + strike_range)
+    call_idx = bisect_left(call_strikes, quote_price)
+    put_idx = bisect_left(put_strikes, quote_price)
+    call_slice = slice(call_idx - strike_range, call_idx + strike_range)
+    put_slice = slice(put_idx - strike_range, put_idx + strike_range)
     call_side = [
         OptionRequest(
             symbol=symbol, exp_date=date, option_type="call", strike_price=s
         )
-        for s in strikes[option_slice]
+        for s in call_strikes[call_slice]
     ]
     put_side = [
         OptionRequest(
             symbol=symbol, exp_date=date, option_type="put", strike_price=s
         )
-        for s in strikes[option_slice]
+        for s in put_strikes[put_slice]
     ]
     return call_side, put_side
 
@@ -73,7 +83,7 @@ def format_text(op_req: OptionRequest, op_greek: OptionGreekData) -> str:
 
 def main_loop(
     rh: Robinhood,
-    strikes: list[list[float]],
+    strikes: tuple[list[float], list[float]],
     symbol: str,
     strike_range: int,
     date: str,
@@ -88,6 +98,7 @@ def main_loop(
             call_side, put_side = option_range(
                 quote.last_trade_price,
                 strikes[0],
+                strikes[1],
                 symbol,
                 date,
                 strike_range,
@@ -100,15 +111,16 @@ def main_loop(
                 f"{'Call':>8} {'Bid':>8} {'Ask':>8} {'IV':>8} {'Volume':>10}",
                 f"{'Put':>8} {'Bid':>8} {'Ask':>8} {'IV':>8} {'Volume':>10}",
             )
-            for i in range(len(call_side)):
-                call_req, put_req = call_side[i], put_side[i]
+            for call_req, put_req in zip(call_side, put_side, strict=False):
                 call, put = vals[call_req][0], vals[put_req][0]
                 print(
                     f"{format_text(call_req, call)} {format_text(put_req, put)}"
                 )
             time.sleep(delay)
             print("\033[2J\033[H", end="")
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, RobinhoodError) as e:
+        if isinstance(e, EndpointNotFoundError):
+            print(e)
         rh.close()
         print("Exiting...")
 

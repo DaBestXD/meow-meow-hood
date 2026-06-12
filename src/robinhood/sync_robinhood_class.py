@@ -8,6 +8,7 @@ from typing import Literal, Self, overload
 
 from robinhood.core._core_robinhood import _CoreRobinhood
 from robinhood.dataclasses.api_dataclasses import (
+    AccountValue,
     AchTransfer,
     CurrencyQuote,
     FuturesContract,
@@ -18,6 +19,7 @@ from robinhood.dataclasses.api_dataclasses import (
     InstrumentQuote,
     OptionChain,
     OptionGreekData,
+    OptionInstrument,
     OptionOrderHistory,
     OptionOrderResponse,
     OptionPosition,
@@ -66,6 +68,7 @@ class Robinhood(_CoreRobinhood):
 
     @overload
     def get_stock_info(self, symbols: str) -> StockInfo | None: ...
+
     @overload
     def get_stock_info(self, symbols: list[str]) -> list[StockInfo] | None: ...
 
@@ -77,6 +80,7 @@ class Robinhood(_CoreRobinhood):
 
     @overload
     def get_index_info(self, symbols: str) -> IndexInfo | None: ...
+
     @overload
     def get_index_info(self, symbols: list[str]) -> list[IndexInfo] | None: ...
 
@@ -88,6 +92,7 @@ class Robinhood(_CoreRobinhood):
 
     @overload
     def get_index_quotes(self, symbols: str) -> IndexQuote | None: ...
+
     @overload
     def get_index_quotes(
         self, symbols: list[str]
@@ -101,6 +106,7 @@ class Robinhood(_CoreRobinhood):
 
     @overload
     def get_stock_quotes(self, symbol: str) -> InstrumentQuote | None: ...
+
     @overload
     def get_stock_quotes(
         self, symbol: list[str]
@@ -135,6 +141,7 @@ class Robinhood(_CoreRobinhood):
 
     @overload
     def get_future_quote(self, ids: str) -> FuturesQuote | None: ...
+
     @overload
     def get_future_quote(self, ids: list[str]) -> list[FuturesQuote] | None: ...
 
@@ -175,17 +182,20 @@ class Robinhood(_CoreRobinhood):
 
     def get_strike_prices(
         self, *, symbol: str, exp_date: str
-    ) -> dict[OptionRequest, list[float]]:
+    ) -> list[float] | tuple[list[float], list[float]] | None:
         """
-        Returns a dict of OptionRequest and a list of strike prices
+        Returns a dict of OptionRequest and a list of strike prices,
+        if for some reason theres a difference in put/call size
+        will return a two lists with the first list being calls,
+        and second being puts
+        Returns `None` if unable ton find strikes for symbol at given date
         """
         return self._run(
             self._get_strike_prices(symbol=symbol, exp_date=exp_date)
         )
 
     def no_db_option_greeks_batch_request(
-        self,
-        option_requests: list[OptionRequest],
+        self, option_requests: list[OptionRequest]
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         """
         This doesn't check the db_cache for any hits
@@ -219,8 +229,7 @@ class Robinhood(_CoreRobinhood):
         return self._run(self._get_option_greek_data(option_ids))
 
     def get_option_greeks_batch_request(
-        self,
-        option_requests: OptionRequest | list[OptionRequest],
+        self, option_requests: OptionRequest | list[OptionRequest]
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         """Return option greek data grouped by the input request objects."""
         return self._run(self._get_option_greeks_batch_request(option_requests))
@@ -253,26 +262,16 @@ class Robinhood(_CoreRobinhood):
         """
         return self._run(self._get_watchlists())
 
-    def get_watchlist_by_name(
-        self,
-        watchlist_name: str,
-    ) -> WatchList | None:
+    def get_watchlist_by_name(self, watchlist_name: str) -> WatchList | None:
         """Return a watchlist by name"""
         return self._run(self._get_watchlist_by_name(watchlist_name))
 
     def create_watchlist(
-        self,
-        display_name: str,
-        icon_emoji: str = "🐱",
-        list_position: int = 0,
+        self, display_name: str, icon_emoji: str = "🐱", list_position: int = 0
     ) -> WatchList:
         """Create a Robinhood watchlist, default emoji is a cat."""
         return self._run(
-            self._create_watchlist(
-                display_name,
-                icon_emoji,
-                list_position,
-            )
+            self._create_watchlist(display_name, icon_emoji, list_position)
         )
 
     def delete_watchlist(self, watchlist_name: str) -> None:
@@ -280,30 +279,16 @@ class Robinhood(_CoreRobinhood):
         return self._run(self._delete_watchlist(watchlist_name))
 
     def add_item_to_watchlist(
-        self,
-        item: str,
-        watchlist_name: str,
+        self, item: str, watchlist_name: str
     ) -> dict | None:
         """Add an equity symbol to a Robinhood watchlist."""
-        return self._run(
-            self._add_item_to_watchlist(
-                item,
-                watchlist_name,
-            )
-        )
+        return self._run(self._add_item_to_watchlist(item, watchlist_name))
 
     def remove_item_from_watchlist(
-        self,
-        item: str,
-        watchlist_name: str,
+        self, item: str, watchlist_name: str
     ) -> dict | None:
         """Remove an item from a Robinhood watchlist."""
-        return self._run(
-            self._remove_item_from_watchlist(
-                item,
-                watchlist_name,
-            )
-        )
+        return self._run(self._remove_item_from_watchlist(item, watchlist_name))
 
     def place_limit_stock_order(
         self,
@@ -383,10 +368,7 @@ class Robinhood(_CoreRobinhood):
         """
         return self._run(
             self._place_option_order(
-                option_legs,
-                order_type,
-                quantity,
-                limit_price,
+                option_legs, order_type, quantity, limit_price
             )
         )
 
@@ -398,6 +380,16 @@ class Robinhood(_CoreRobinhood):
         """Use stock order id from StockOrderResponse to cancel"""
         return self._run(self._cancel_stock_order(id))
 
+    @overload
+    def get_ach_transfers(
+        self, raw_json_response: Literal[False] = False
+    ) -> list[AchTransfer] | None: ...
+
+    @overload
+    def get_ach_transfers(
+        self, raw_json_response: Literal[True]
+    ) -> list[dict] | None: ...
+
     def get_ach_transfers(
         self, raw_json_response: bool = False
     ) -> list[AchTransfer] | list[dict] | None:
@@ -407,6 +399,16 @@ class Robinhood(_CoreRobinhood):
         """
         return self._run(self._get_ach_transfers(raw_json_response))
 
+    @overload
+    def get_accounts(
+        self, raw_json_response: Literal[False] = False
+    ) -> list[RobinhoodAccount] | list[dict] | None: ...
+
+    @overload
+    def get_accounts(
+        self, raw_json_response: Literal[True]
+    ) -> list[RobinhoodAccount] | list[dict] | None: ...
+
     def get_accounts(
         self, raw_json_response: bool = False
     ) -> list[RobinhoodAccount] | list[dict] | None:
@@ -414,7 +416,9 @@ class Robinhood(_CoreRobinhood):
         Returns all robinhood accounts
         Use `raw_json_response = True` for raw json response
         """
-        return self._run(self._get_accounts(raw_json_response))
+        return self._run(
+            self._get_accounts(raw_json_response=raw_json_response)
+        )
 
     def change_account(self, acc_id: str) -> None:
         """
@@ -423,3 +427,30 @@ class Robinhood(_CoreRobinhood):
         Sync function
         """
         return self._change_account(acc_id)
+
+    @overload
+    def get_option_meta_data(
+        self, ids: list[str]
+    ) -> list[OptionInstrument] | None: ...
+
+    @overload
+    def get_option_meta_data(self, ids: str) -> OptionInstrument | None: ...
+
+    def get_option_meta_data(
+        self, ids: str | list[str]
+    ) -> list[OptionInstrument] | OptionInstrument | None:
+        """
+        Endpoint for taking option ids and getting more meta data back
+        This is needed as market data for option id does not return strike_price
+        This does not provide information about greek data
+        """
+        return self._run(self._get_option_meta_data(ids))
+
+    def get_account_value_impl(
+        self, acc_id: str | None = None
+    ) -> AccountValue | None:
+        """
+        Uses the classes' self.user_id if acc_id is not provided
+        Returns an AccountValue dataclass
+        """
+        return self._run(self._get_account_value_impl(acc_id))

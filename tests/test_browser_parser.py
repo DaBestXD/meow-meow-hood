@@ -1,336 +1,272 @@
 import json
+import os
 import sqlite3
-import tempfile
 import time
-import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import Mock, mock_open, patch
+from unittest.mock import Mock, patch
 
+import pytest
 import snappy
 
 from robinhood.browser_functions.browser_token_parser import (
-    CHROME_LINUX,
+    DB_PATH,
     Chrome,
     Firefox,
-    _chrome_db_parse,
-    _firefox_db_parse,
-    auto_open_browser,
+    _chrome_log_file_path,
+    _close_process,
+    _decode_jwt,
+    _get_firefox_profile_path,
     get_acc_id,
-    get_token,
 )
+from robinhood.robinhood_errors import AuthenticationError, TokenExtractionError
 from tests.support import build_test_jwt
 
 
-class TestBrowserTokenParser(unittest.TestCase):
-    def test_chrome_db_parse_extracts_valid_access_token_from_log(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            log_file = Path(temp_dir) / "000001.log"
-            valid_token = build_test_jwt(exp=int(time.time()) + 3600)
-            log_file.write_text(
-                '[\\"access_token\\",\\"' + valid_token + '\\"]'
-            )
+def write_chrome_log(root: Path, *tokens: str) -> Path:
+    log_file = root / "000001.log"
+    log_file.write_text(
+        "".join(f'[\\"access_token\\",\\"{token}\\"]' for token in tokens)
+    )
+    return log_file
 
-            token = _chrome_db_parse(Path(temp_dir))
 
-        self.assertEqual(valid_token, token)
+def write_firefox_auth_state(profile_root: Path, token: str) -> Path:
+    profile_path = profile_root / "profile.default-release"
+    sqlite_path = profile_path / DB_PATH
+    sqlite_path.parent.mkdir(parents=True)
+    con = sqlite3.connect(sqlite_path)
+    try:
+        con.execute("CREATE TABLE data (key TEXT, value BLOB)")
+        con.execute(
+            "INSERT INTO data VALUES (?, ?)",
+            (
+                "web:auth_state",
+                snappy.compress(json.dumps({"access_token": token}).encode()),
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return profile_path
 
-    def test_chrome_db_parse_skips_malformed_and_expired_tokens(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            log_file = Path(temp_dir) / "000001.log"
-            expired_token = build_test_jwt(exp=int(time.time()) - 60)
-            valid_token = build_test_jwt(exp=int(time.time()) + 3600)
-            log_file.write_text(
-                '[\\"access_token\\",\\"not-a-jwt\\"]'
-                '[\\"access_token\\",\\"' + expired_token + '\\"]'
-                '[\\"access_token\\",\\"' + valid_token + '\\"]'
-            )
 
-            token = _chrome_db_parse(Path(temp_dir))
+class TestBrowserTokenParser:
+    def test_decode_jwt_returns_payload(self) -> None:
+        token = build_test_jwt(exp=1234567890)
 
-        self.assertEqual(valid_token, token)
+        assert {"exp": 1234567890} == _decode_jwt(token)
 
-    def test_chrome_db_parse_returns_none_without_log_files(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            token = _chrome_db_parse(Path(temp_dir))
+    @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
+    def test_chrome_log_file_path_returns_log_with_valid_token(
+        self, mock_get_acc_id: Mock, tmp_path: Path
+    ) -> None:
+        expired_token = build_test_jwt(exp=int(time.time()) - 60)
+        valid_token = build_test_jwt(exp=int(time.time()) + 3600)
+        log_file = write_chrome_log(
+            tmp_path, "not-a-jwt", expired_token, valid_token
+        )
+        mock_get_acc_id.return_value = "ACC123"
 
-        self.assertIsNone(token)
+        assert log_file == _chrome_log_file_path(tmp_path)
+        mock_get_acc_id.assert_called_once_with(valid_token)
 
-    def test_firefox_db_parse_extracts_access_token_from_sqlite_profile(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            profile_root = Path(temp_dir)
-            sqlite_path = (
-                profile_root
-                / "profile.default-release"
-                / "storage"
-                / "default"
-                / "https+++robinhood.com"
-                / "ls"
-                / "data.sqlite"
-            )
-            sqlite_path.parent.mkdir(parents=True)
-            con = sqlite3.connect(sqlite_path)
-            try:
-                con.execute("CREATE TABLE data (key TEXT, value BLOB)")
-                con.execute(
-                    "INSERT INTO data VALUES (?, ?)",
-                    (
-                        "web:auth_state",
-                        snappy.compress(
-                            json.dumps(
-                                {"access_token": "bearer-token"}
-                            ).encode()
-                        ),
-                    ),
-                )
-                con.commit()
-            finally:
-                con.close()
+    @patch(
+        "robinhood.browser_functions.browser_token_parser.get_acc_id",
+        side_effect=AuthenticationError("invalid"),
+    )
+    def test_chrome_log_file_path_raises_when_only_token_is_rejected(
+        self, _mock_get_acc_id: Mock, tmp_path: Path
+    ) -> None:
+        valid_token = build_test_jwt(exp=int(time.time()) + 3600)
+        write_chrome_log(tmp_path, valid_token)
 
-            token = _firefox_db_parse(profile_root)
+        with pytest.raises(TokenExtractionError):
+            _chrome_log_file_path(tmp_path)
 
-        self.assertEqual("bearer-token", token)
+    @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
+    def test_chrome_get_token_skips_rejected_tokens(
+        self, mock_get_acc_id: Mock, tmp_path: Path
+    ) -> None:
+        rejected_token = build_test_jwt(exp=int(time.time()) + 3600)
+        valid_token = build_test_jwt(exp=int(time.time()) + 7200)
+        log_file = write_chrome_log(tmp_path, rejected_token, valid_token)
+        mock_get_acc_id.side_effect = [
+            "ACC123",
+            AuthenticationError("invalid"),
+            "ACC123",
+        ]
+
+        with (
+            patch(
+                "robinhood.browser_functions.browser_token_parser.sys.platform",
+                "darwin",
+            ),
+            patch(
+                "robinhood.browser_functions.browser_token_parser.CHROME_MAC",
+                tmp_path,
+            ),
+        ):
+            browser = Chrome()
+
+        assert log_file == browser._file_to_stat_check
+        assert valid_token == browser.get_token()
+
+    @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
+    def test_firefox_profile_path_returns_profile_with_valid_token(
+        self, mock_get_acc_id: Mock, tmp_path: Path
+    ) -> None:
+        valid_token = build_test_jwt(exp=int(time.time()) + 3600)
+        profile_path = write_firefox_auth_state(tmp_path, valid_token)
+        mock_get_acc_id.return_value = "ACC123"
+
+        assert profile_path == _get_firefox_profile_path(tmp_path)
+        mock_get_acc_id.assert_called_once_with(valid_token)
+
+    def test_firefox_profile_path_raises_for_stale_token(
+        self, tmp_path: Path
+    ) -> None:
+        expired_token = build_test_jwt(exp=int(time.time()) - 60)
+        write_firefox_auth_state(tmp_path, expired_token)
+
+        with pytest.raises(TokenExtractionError, match="stale token"):
+            _get_firefox_profile_path(tmp_path)
+
+    @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
+    def test_firefox_get_token_returns_validated_token(
+        self, mock_get_acc_id: Mock, tmp_path: Path
+    ) -> None:
+        valid_token = build_test_jwt(exp=int(time.time()) + 3600)
+        profile_path = write_firefox_auth_state(tmp_path, valid_token)
+        mock_get_acc_id.return_value = "ACC123"
+
+        browser = Firefox.__new__(Firefox)
+        browser.db_path = profile_path / DB_PATH
+
+        assert valid_token == browser.get_token()
+        mock_get_acc_id.assert_called_once_with(valid_token)
+
+    @patch(
+        "robinhood.browser_functions.browser_token_parser.get_acc_id",
+        side_effect=AuthenticationError("invalid"),
+    )
+    def test_firefox_get_token_can_return_none_for_rejected_token(
+        self, _mock_get_acc_id: Mock, tmp_path: Path
+    ) -> None:
+        valid_token = build_test_jwt(exp=int(time.time()) + 3600)
+        profile_path = write_firefox_auth_state(tmp_path, valid_token)
+        browser = Firefox.__new__(Firefox)
+        browser.db_path = profile_path / DB_PATH
+
+        assert browser.get_token(raise_err_on_stale_token=False) is None
+
+    def test_last_accessed_greater_than_n_days_uses_stat_file(
+        self, tmp_path: Path
+    ) -> None:
+        stat_file = tmp_path / "auth.log"
+        stat_file.write_text("auth")
+        old_time = (datetime.now(timezone.utc) - timedelta(days=3)).timestamp()
+        os.utime(stat_file, (old_time, old_time))
+        browser = Chrome.__new__(Chrome)
+        browser._file_to_stat_check = stat_file
+
+        assert browser.last_accessed_greater_than_n_days(days=1)
+        assert not browser.last_accessed_greater_than_n_days(days=7)
 
     @patch("robinhood.browser_functions.browser_token_parser.requests.get")
-    def test_get_acc_id_returns_account_number_on_success(self, mock_get):
+    def test_get_acc_id_returns_account_number_on_success(
+        self, mock_get: Mock
+    ) -> None:
         mock_get.return_value = Mock(
             status_code=200,
             json=Mock(return_value={"results": [{"account_number": "ABC123"}]}),
         )
 
-        account_number = get_acc_id("bearer-token")
-
-        self.assertEqual("ABC123", account_number)
+        assert "ABC123" == get_acc_id("bearer-token")
         mock_get.assert_called_once()
 
     @patch("robinhood.browser_functions.browser_token_parser.requests.get")
-    def test_get_acc_id_returns_status_code_on_failure(self, mock_get):
+    def test_get_acc_id_raises_authentication_error_on_failure(
+        self, mock_get: Mock
+    ) -> None:
         mock_get.return_value = Mock(status_code=403)
 
-        status_code = get_acc_id("bearer-token")
+        with pytest.raises(AuthenticationError, match="403"):
+            get_acc_id("bearer-token")
 
-        self.assertEqual(403, status_code)
+    @patch("robinhood.browser_functions.browser_token_parser.requests.get")
+    def test_get_acc_id_retries_server_errors(self, mock_get: Mock) -> None:
+        mock_get.side_effect = [
+            Mock(status_code=500),
+            Mock(
+                status_code=200,
+                json=Mock(
+                    return_value={"results": [{"account_number": "ABC123"}]}
+                ),
+            ),
+        ]
 
-    @patch("robinhood.browser_functions.browser_token_parser._chrome_db_parse")
-    @patch("robinhood.browser_functions.browser_token_parser._firefox_db_parse")
-    @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
-    @patch("robinhood.browser_functions.browser_token_parser.auto_open_browser")
-    def test_get_token_reads_browser_token_without_writing_env(
+        assert "ABC123" == get_acc_id("bearer-token")
+        assert 2 == mock_get.call_count
+
+    @patch("robinhood.browser_functions.browser_token_parser.subprocess.run")
+    def test_close_process_uses_matching_windows_browser_name(
+        self, mock_run: Mock
+    ) -> None:
+        proc = Mock()
+
+        with patch(
+            "robinhood.browser_functions.browser_token_parser.sys.platform",
+            "win32",
+        ):
+            _close_process(proc, is_firefox=False)
+
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["args"] == [
+            "taskkill",
+            "/IM",
+            "chrome.exe",
+            "/T",
+            "/F",
+        ]
+        proc.wait.assert_called_once_with(timeout=5)
+
+    @patch("robinhood.browser_functions.browser_token_parser._close_process")
+    @patch("robinhood.browser_functions.browser_token_parser.subprocess.Popen")
+    @patch("robinhood.browser_functions.browser_token_parser.time.sleep")
+    def test_chrome_open_and_close_browser_uses_selected_profile(
         self,
-        mock_auto_open_browser,
-        mock_get_acc_id,
-        mock_firefox_parse,
-        mock_chrome_parse,
-    ):
-        env_path = Path("/tmp/test.env")
-        mock_chrome_parse.return_value = None
-        mock_firefox_parse.return_value = "bearer-token"
-        mock_get_acc_id.return_value = "ACC123"
+        mock_sleep: Mock,
+        mock_popen: Mock,
+        mock_close_process: Mock,
+        tmp_path: Path,
+    ) -> None:
+        stat_file = tmp_path / "000001.log"
+        stat_file.write_text("auth")
+        proc = Mock()
+        mock_popen.return_value = proc
+        browser = Chrome.__new__(Chrome)
+        browser.application_path = Path("/Applications/Google Chrome")
+        browser.data_dir = tmp_path / "User Data"
+        browser.profile_dir = "Profile 1"
+        browser.path_to_profile_dir = browser.data_dir / browser.profile_dir
+        browser.chrome_log_file_path = stat_file
 
         with (
-            patch("builtins.open", mock_open()) as mock_file,
             patch(
                 "robinhood.browser_functions.browser_token_parser.sys.platform",
-                "darwin",
+                "linux",
+            ),
+            patch(
+                "robinhood.browser_functions.browser_token_parser.os.environ",
+                {},
             ),
         ):
-            result = get_token(
-                env_path=env_path,
-                write_env=False,
-                open_browser=False,
-            )
+            browser.open_and_close_browser(time_until_close=1, headless=True)
 
-        self.assertEqual(("bearer-token", "ACC123"), result)
-        self.assertEqual(2, mock_get_acc_id.call_count)
-        mock_chrome_parse.assert_called_once()
-        mock_firefox_parse.assert_called_once()
-        mock_auto_open_browser.assert_not_called()
-        mock_file.assert_not_called()
-
-    @patch("robinhood.browser_functions.browser_token_parser._chrome_db_parse")
-    @patch("robinhood.browser_functions.browser_token_parser._firefox_db_parse")
-    @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")
-    @patch("robinhood.browser_functions.browser_token_parser.auto_open_browser")
-    def test_get_token_retries_after_403_response(
-        self,
-        mock_auto_open_browser,
-        mock_get_acc_id,
-        mock_firefox_parse,
-        mock_chrome_parse,
-    ):
-        env_path = Path("/tmp/test.env")
-        mock_chrome_parse.return_value = None
-        mock_firefox_parse.return_value = "bearer-token"
-        mock_get_acc_id.side_effect = [403, 403, "ACC123", "ACC123"]
-
-        with patch(
-            "robinhood.browser_functions.browser_token_parser.sys.platform",
-            "darwin",
-        ):
-            result = get_token(
-                env_path=env_path,
-                write_env=False,
-                open_browser=True,
-            )
-
-        self.assertEqual(("bearer-token", "ACC123"), result)
-        self.assertEqual(
-            [call.args[0] for call in mock_auto_open_browser.call_args_list],
-            [Firefox(), Chrome()],
-        )
-        self.assertEqual(4, mock_get_acc_id.call_count)
-
-    @patch("robinhood.browser_functions.browser_token_parser._chrome_db_parse")
-    @patch("robinhood.browser_functions.browser_token_parser._firefox_db_parse")
-    @patch(
-        "robinhood.browser_functions.browser_token_parser.get_acc_id",
-        return_value="ACC123",
-    )
-    def test_get_token_uses_chrome_first_on_linux(
-        self,
-        mock_get_acc_id,
-        mock_firefox_parse,
-        mock_chrome_parse,
-    ):
-        env_path = Path("/tmp/test.env")
-        mock_chrome_parse.return_value = "bearer-token"
-
-        with patch(
-            "robinhood.browser_functions.browser_token_parser.sys.platform",
-            "linux",
-        ):
-            result = get_token(
-                env_path=env_path,
-                write_env=False,
-                open_browser=False,
-            )
-
-        self.assertEqual(("bearer-token", "ACC123"), result)
-        mock_chrome_parse.assert_called_once_with(CHROME_LINUX)
-        mock_firefox_parse.assert_not_called()
-        self.assertEqual(2, mock_get_acc_id.call_count)
-
-    @patch(
-        "robinhood.browser_functions.browser_token_parser._chrome_db_parse",
-        return_value=None,
-    )
-    @patch(
-        "robinhood.browser_functions.browser_token_parser._firefox_db_parse",
-        return_value=None,
-    )
-    def test_get_token_raises_when_no_browser_token_is_found(
-        self,
-        _mock_firefox_parse,
-        _mock_chrome_parse,
-    ):
-        with patch(
-            "robinhood.browser_functions.browser_token_parser.sys.platform",
-            "linux",
-        ):
-            with self.assertRaises(RuntimeError):
-                get_token(
-                    env_path=Path("/tmp/test.env"),
-                    write_env=False,
-                    open_browser=False,
-                )
-
-    @patch("builtins.open", new_callable=mock_open)
-    @patch(
-        "robinhood.browser_functions.browser_token_parser.get_acc_id",
-        return_value="ACC123",
-    )
-    @patch(
-        "robinhood.browser_functions.browser_token_parser._chrome_db_parse",
-        return_value=None,
-    )
-    @patch("robinhood.browser_functions.browser_token_parser._firefox_db_parse")
-    def test_get_token_writes_env_file_when_enabled(
-        self,
-        mock_firefox_parse,
-        _mock_chrome_parse,
-        _mock_get_acc_id,
-        mock_file,
-    ):
-        env_path = Path("/tmp/test.env")
-        mock_firefox_parse.return_value = "bearer-token"
-
-        with patch(
-            "robinhood.browser_functions.browser_token_parser.sys.platform",
-            "darwin",
-        ):
-            get_token(
-                env_path=env_path,
-                write_env=True,
-                open_browser=False,
-            )
-
-        mock_file.assert_called_once_with(env_path, "w")
-        handle = mock_file()
-        handle.write.assert_any_call("BEARER_TOKEN=bearer-token\n")
-        handle.write.assert_any_call("ACCOUNT_NUMBER=ACC123")
-
-    def test_get_token_raises_for_unsupported_platform(self):
-        with patch(
-            "robinhood.browser_functions.browser_token_parser.sys.platform",
-            "amigaos",
-        ):
-            with self.assertRaises(OSError):
-                get_token(
-                    env_path=Path("/tmp/test.env"),
-                    write_env=False,
-                    open_browser=False,
-                )
-
-    @patch("robinhood.browser_functions.browser_token_parser.time.sleep")
-    @patch("robinhood.browser_functions.browser_token_parser.subprocess.run")
-    @patch("robinhood.browser_functions.browser_token_parser.subprocess.Popen")
-    def test_auto_open_browser_uses_open_and_osascript_on_macos(
-        self,
-        mock_popen,
-        mock_run,
-        mock_sleep,
-    ):
-        with patch(
-            "robinhood.browser_functions.browser_token_parser.sys.platform",
-            "darwin",
-        ):
-            auto_open_browser(Chrome(), wait_time=1)
-
-        mock_popen.assert_called_once_with(
-            ["open", "-a", "Google Chrome", "https://robinhood.com"]
-        )
+        args = mock_popen.call_args.args[0]
+        assert "--headless=new" in args
+        assert f"--user-data-dir={browser.data_dir}" in args
+        assert f"--profile-directory={browser.profile_dir}" in args
         mock_sleep.assert_called_once_with(1)
-        mock_run.assert_called_once_with(
-            [
-                "osascript",
-                "-e",
-                'tell application "Google Chrome" to quit',
-            ],
-            check=False,
-        )
-
-    @patch("robinhood.browser_functions.browser_token_parser.time.sleep")
-    @patch("robinhood.browser_functions.browser_token_parser.subprocess.run")
-    @patch("robinhood.browser_functions.browser_token_parser.subprocess.Popen")
-    def test_auto_open_browser_uses_xdg_open_on_linux(
-        self,
-        mock_popen,
-        mock_run,
-        mock_sleep,
-    ):
-        with patch(
-            "robinhood.browser_functions.browser_token_parser.sys.platform",
-            "linux",
-        ):
-            auto_open_browser(Firefox(), wait_time=1)
-
-        mock_popen.assert_called_once_with(
-            ["xdg-open", "https://robinhood.com"]
-        )
-        mock_sleep.assert_called_once_with(1)
-        mock_run.assert_called_once_with(
-            ["pkill", "-f", "firefox"], check=False
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
+        mock_close_process.assert_called_once_with(proc, is_firefox=False)

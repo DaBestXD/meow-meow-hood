@@ -7,11 +7,9 @@ This page shows common workflows for the sync and async clients.
 These examples assume one of the following is true:
 
 - you are already logged in to Robinhood in a local Chrome or Firefox profile
-- you plan to pass an `access_token` yourself
 
-When `extract_token=True` (the default), the client checks local browser storage
-for a valid session token. Use a context manager when possible so the HTTP
-session and SQLite cache close automatically.
+The client checks local browser storage for a valid session token. Use a context
+manager when possible so the HTTP session and SQLite cache close automatically.
 
 ## Create A Sync Client
 
@@ -62,18 +60,19 @@ finally:
 
 `get_stock_quotes("SPY")` returns an `InstrumentQuote` object or `None`.
 
-## Use A Manual Access Token
+## Use Firefox
 
 ```python
-from robinhood import Robinhood
+from robinhood import Firefox, Robinhood
 
-with Robinhood(extract_token=False, access_token="...") as rh:
+with Robinhood(browser_type=Firefox) as rh:
     quote = rh.get_stock_quotes("SPY")
     if quote is not None:
         print(quote.last_trade_price)
 ```
 
-This skips browser token extraction and uses the supplied bearer token.
+Chrome is the default browser. Pass `browser_type=Firefox` to read token state
+from Firefox instead.
 
 ## Store Config Files In A Custom Directory
 
@@ -88,8 +87,21 @@ with Robinhood(config_path=Path.home() / ".config") as rh:
         print(quote.symbol)
 ```
 
-The client stores `.env` and `meow-meow-hood.db` inside a `.meow-meow-config`
-directory under the provided path.
+The client stores `meow-meow-hood.db` inside a `.meow-meow-config` directory
+under the provided path when `enable_cache=True`.
+
+## Refresh The Browser Token
+
+```python
+from robinhood import Robinhood
+
+with Robinhood() as rh:
+    rh.refresh_access_token(auto_open_browser=False)
+    print(rh.get_access_token_expiry())
+```
+
+`refresh_access_token()` can briefly open the selected browser when
+`auto_open_browser=True` and the browser auth file is stale.
 
 ## Disable The Local Cache
 
@@ -203,13 +215,22 @@ with Robinhood() as rh:
     if not dates:
         raise RuntimeError("No expiration dates returned for SPY")
 
-    strikes_by_request = rh.get_strike_prices(symbol="SPY", exp_date=dates[0])
-    for option_request, strikes in strikes_by_request.items():
-        print(option_request.option_type, strikes[:5])
+    strikes = rh.get_strike_prices(symbol="SPY", exp_date=dates[0])
+    if strikes is None:
+        raise RuntimeError("No strikes returned for SPY")
+
+    if isinstance(strikes, tuple):
+        call_strikes, put_strikes = strikes
+    else:
+        call_strikes = put_strikes = strikes
+
+    print("calls", call_strikes[:5])
+    print("puts", put_strikes[:5])
 ```
 
-This returns a `dict[OptionRequest, list[float]]` with separate keys for the
-call side and put side of the selected expiration date.
+This returns a shared `list[float]` when call and put strikes match, a
+`tuple[list[float], list[float]]` of `(call_strikes, put_strikes)` when they
+differ, or `None` when strikes cannot be found for the selected expiration date.
 
 ## View Option Chain Metadata
 

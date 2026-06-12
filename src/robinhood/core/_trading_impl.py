@@ -23,9 +23,9 @@ from robinhood.dataclasses.api_dataclasses import (
     StockOrderStockAmount,
     _OptionLeg,
 )
-from robinhood.errors import (
+from robinhood.robinhood_errors import (
     AccountIdNotFoundError,
-    InstruemtNotFoundError,
+    InstrumentNotFoundError,
     MalformedOrderError,
 )
 from robinhood.utils._normalize_symbol import uppercase_input
@@ -61,7 +61,7 @@ class TradingImpl(TypingBase):
         )
         res = await self._get_stock_info(symbol)
         if not res:
-            raise InstruemtNotFoundError(f"{symbol} was not found")
+            raise InstrumentNotFoundError(f"{symbol} was not found")
         quote = await self._get_stock_quotes(symbol)
         if not quote:
             raise ValueError(f"unable to retrieve quote for {symbol}")
@@ -257,7 +257,7 @@ class TradingImpl(TypingBase):
             raise MalformedOrderError("Order should only be for one symbol")
         chain = await self._get_option_chain_data(*chain_symbol_pair)
         if not chain:
-            raise InstruemtNotFoundError(
+            raise InstrumentNotFoundError(
                 f"Unable to find chain id for {[*chain_symbol_pair][0]}"
             )
         # 😹 wtf is this piece of shit

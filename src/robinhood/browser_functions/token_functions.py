@@ -3,50 +3,19 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import sqlite3
-import sys
 import time
 from datetime import datetime, timezone
-from os import PathLike
-from pathlib import Path
 from typing import Any
 
-import requests
-from typing_extensions import deprecated
-
 from robinhood.browser_functions.browser_token_parser import (
-    CHROME_LINUX,
-    CHROME_MAC,
-    CHROME_WINDOWS,
-    DB_PATH,
-    FIRE_LINUX,
-    FIRE_MAC,
-    FIRE_WINDOWS,
     Browser,
-    Chrome,
-    Firefox,
-    auto_open_browser,
-    get_token,
 )
+from robinhood.robinhood_errors import TokenExtractionError
 
 logger = logging.getLogger(__name__)
 
 
-@deprecated("No need to test this")
-def test_ping(access_token: str, attempts: int = 3) -> bool:
-    """
-    IDK why this exists can probably delete later
-    """
-    test_link = "https://api.robinhood.com/accounts/"
-    headers = {"authorization": f"{access_token}"}
-    res = requests.get(test_link, headers=headers, timeout=5)
-    if res.status_code >= 500 and attempts >= 0:
-        logger.warning("5XX error retrying...")
-        test_ping(access_token, attempts - 1)
-    return res.ok
-
-
-def return_access_token_expiry(access_token: str) -> int:
+def _return_access_token_expiry(access_token: str) -> int:
     """Return the token expiry date"""
     token = access_token
     payload_b64 = token.split(".")[1]
@@ -54,98 +23,13 @@ def return_access_token_expiry(access_token: str) -> int:
     payload: dict[str, Any] = json.loads(
         base64.urlsafe_b64decode(payload_b64).decode()
     )
-    logger.debug("payload expirary: %s", payload["exp"])
     return int(payload["exp"])
-
-
-def _chrome_helper(f: Path) -> int:
-    for i in f.iterdir():
-        if ".log" not in i.name:
-            continue
-        return int(i.stat().st_mtime)
-    raise ValueError("unable to find file mod time")
-
-
-def _firefox_helper(f: Path) -> int:
-    # this will break if you have mulitple firefox profiles and
-    # you have logged into robinhood on both
-    for n in f.iterdir():
-        if not n.is_dir():
-            continue
-        db_file = n / DB_PATH
-        db_file_path = "file:" + str(db_file) + "?immutable=1"
-        try:
-            # check to make sure this is the correct db file
-            with sqlite3.connect(db_file_path, uri=True) as _:
-                logger.debug("Connected to %s", db_file_path)
-            return int(db_file.stat().st_mtime)
-        except sqlite3.OperationalError:
-            continue
-    raise ValueError("unable to find file mod time")
-
-
-def file_stat(browser: Browser) -> int:
-    """Return the file modified timestamp"""
-    if sys.platform == "darwin":
-        if isinstance(browser, Firefox):
-            return _firefox_helper(FIRE_MAC)
-        if isinstance(browser, Chrome):
-            return _chrome_helper(CHROME_MAC)
-
-    if sys.platform == "win32":
-        if isinstance(browser, Firefox):
-            return _firefox_helper(FIRE_WINDOWS)
-        if isinstance(browser, Chrome):
-            return _chrome_helper(CHROME_WINDOWS)
-
-    if sys.platform == "linux":
-        if isinstance(browser, Firefox):
-            return _firefox_helper(FIRE_LINUX)
-        if isinstance(browser, Chrome):
-            return _chrome_helper(CHROME_LINUX)
-
-    raise ValueError("unable to find db_file stat")
-
-
-def check_if_modified_date_within_range(days: int) -> bool:
-    """
-    Check if the last modified date is within a certain range,
-    default is 7 days. If this fails the check you will most likely
-    need to relogin into robinhood manually
-    """
-    last_mod = -1
-    for b in (Firefox(), Chrome()):
-        try:
-            last_mod = file_stat(b)
-        except ValueError:
-            logger.debug("auth information not found in %s", repr(b))
-            continue
-    last_mod = (
-        datetime.now(timezone.utc)
-        - datetime.fromtimestamp(last_mod, timezone.utc)
-    ).days
-    return last_mod >= days
-
-
-def _open_browser(
-    browser: Browser,
-    wait_time: int = 10,
-    days: int = 1,
-) -> None:
-    """
-    Checks if the last modified date is greater than one day,
-    then open the browser pointed at robinhood, closes after
-    N seconds(default is 10 seconds)
-    """
-    if check_if_modified_date_within_range(days=days):
-        auto_open_browser(browser, wait_time=wait_time)
-    return None
 
 
 def _refresh_access_token(
     access_token: str,
-    env_path: str | PathLike[str],
-    write_env: bool,
+    browser: Browser,
+    max_day_without_access: int = 7,
 ) -> str | None:
     """
     Convenience wrapper function checks token expirary date,
@@ -153,23 +37,30 @@ def _refresh_access_token(
     return the new token.
     None response means token is not expired, RuntimeError means
     you will need to manually log back into Robinhood
+    String response means an auth session was sucessfully recovered
     """
-    token_exp = return_access_token_expiry(access_token)
-    if not (token_exp <= int(time.time())):
-        logger.info("Access token is not expired, exp: %s", str(token_exp))
+    token_exp = _return_access_token_expiry(access_token)
+    if token_exp > int(time.time()):
+        logger.info(
+            "Access token is not expired, exp: %s",
+            datetime.fromtimestamp(token_exp),
+        )
         return None
+    days_old = (
+        datetime.now(timezone.utc)
+        - datetime.fromtimestamp(
+            browser._file_to_stat_check.stat().st_mtime, timezone.utc
+        )
+    ).days
+    if days_old < max_day_without_access:
+        token = browser.get_token()
+        if not token:
+            raise TokenExtractionError(
+                f"{_refresh_access_token.__qualname__} unable to retrieve token"
+            )
+        logger.info("Fresh token has been extracted")
+        return token
     # Raise error if there's no way to recover the auth token
-    if token_exp <= int(time.time()) and check_if_modified_date_within_range(
-        days=1
-    ):
-        raise RuntimeError(
-            """Token is expired and auth modified date is greater than 30 days.
-            You will need to relogin manually"""
-        )
-    elif token_exp <= int(time.time()):
-        # if the token is expired but its within the mod period
-        access_token, _ = get_token(
-            env_path=env_path, write_env=write_env, open_browser=True
-        )
-        return access_token
-    return None
+    raise RuntimeError(
+        "Token is expired and auth modified date is greater than 7 days. You will need to relogin manually"  # noqa E501
+    )

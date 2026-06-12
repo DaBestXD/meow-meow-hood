@@ -39,7 +39,10 @@ class FunctionType:
         self.overload_impl: list[AstFunctionType] = []
 
     def __str__(self) -> str:
-        return f"{self.raw_func_name}({self.func_origin.name})"
+        missing_from = (
+            self.func_missing_from.name if self.func_missing_from else None
+        )
+        return f"{self.raw_func_name}({self.func_origin.name}): {missing_from}"  # noqa E501
 
     def __repr__(self) -> str:
         class_vars = [f"{k}={v}" for k, v in self.__dict__.items()]
@@ -92,9 +95,7 @@ def check_file_for_function(
     file_path: Path,
     exported_funcs: list[FunctionType],
 ):
-    f = open(file_path, "r")
-    mod = ast.parse(f.read())
-    f.close()
+    mod = ast.parse(file_path.read_text())
     set_funcs_names = {f.func_name: f for f in exported_funcs}
     for i in ast.walk(mod):
         if not isinstance(i, AstFunctionType):
@@ -245,6 +246,7 @@ if __name__ == "__main__":
     missing = implementation_checker_func(cmd_args.files, cmd_args.target_files)
     configure_logger(cmd_args.debug_level)
     if missing:
-        raise RuntimeError(f"Missing impl for: {missing}")
+        missing_funcs = "\n".join([str(f) for f in missing])
+        raise RuntimeError(f"Missing impl for: {missing_funcs}")
     else:
         print("No missing implementations!")

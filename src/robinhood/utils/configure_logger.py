@@ -1,11 +1,12 @@
 import logging
 
 MISSING = object()
+_MISSING = object
 
 
 def configure_logger(
     logging_level: int | None = logging.INFO,
-    log_handler: logging.Handler | None | object = MISSING,
+    log_handler: logging.Handler | None | _MISSING = MISSING,
 ) -> None:
     logger = logging.getLogger("robinhood")
     if logging_level is None:

@@ -1,58 +1,66 @@
-import asyncio
-import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+
+from robinhood.robinhood_errors import TokenExtractionError
 from robinhood.sync_robinhood_class import Robinhood
+from tests.support import build_robinhood_client
 
 
-class TestCoreRobinhoodInit(unittest.TestCase):
-    def close_client_loop(self, client: Robinhood) -> None:
-        if not client.event_loop.is_closed():
-            client.event_loop.close()
+class FakeBrowser:
+    windows_db_path = Path("unused")
+    linux_db_path = Path("unused")
+    mac_db_path = Path("unused")
+    token: str | None = "browser-token"
+    acc_id = "ACC123"
 
-    def test_init_uses_explicit_token_without_setup_when_requested(self):
-        with (
-            patch("robinhood.core._core_robinhood.set_up") as mock_set_up,
-            patch("robinhood.core._core_robinhood.get_token") as mock_get_token,
-            patch(
-                "robinhood.core._core_robinhood.get_acc_id"
-            ) as mock_get_acc_id,
-        ):
-            client = Robinhood(
-                access_token="direct-token",
-                extract_token=False,
-                enable_cache=False,
-                logging_level=None,
-            )
+    def __init__(self) -> None:
+        self._file_to_stat_check = Path("unused")
+        self.get_token_mock = Mock(return_value=self.token)
+        self.last_accessed_greater_than_n_days_mock = Mock(return_value=False)
+        self.open_and_close_browser_mock = Mock()
 
-        self.addCleanup(self.close_client_loop, client)
-        self.assertEqual("direct-token", client._async_http_client.access_token)
-        self.assertIsNone(client._db_cache)
-        self.assertIsNone(client.env_path)
-        mock_set_up.assert_not_called()
-        mock_get_token.assert_not_called()
-        mock_get_acc_id.assert_not_called()
+    def get_token(self) -> str | None:
+        return self.get_token_mock()
 
-    def test_init_uses_env_token_and_account_id(self):
+    def open_and_close_browser(
+        self,
+        retries: int = 3,
+        time_until_close: float = 10,
+        *,
+        headless: bool = True,
+    ) -> None:
+        self.open_and_close_browser_mock(
+            retries=retries,
+            time_until_close=time_until_close,
+            headless=headless,
+        )
+
+    def last_accessed_greater_than_n_days(self, days: int = 1) -> bool:
+        return bool(self.last_accessed_greater_than_n_days_mock(days=days))
+
+
+class TestCoreRobinhoodInit:
+    @pytest.fixture(autouse=True)
+    def _set_client_tracker(self, sync_client_tracker) -> None:
+        self.track_client = sync_client_tracker
+
+    def test_init_extracts_token_from_browser_and_creates_cache(self) -> None:
         config_dir = Path("/tmp/meow-config")
         http_client = Mock()
+        cache = Mock()
 
         with (
             patch(
                 "robinhood.core._core_robinhood.set_up",
                 return_value=config_dir,
             ) as mock_set_up,
-            patch("robinhood.core._core_robinhood.load_dotenv") as mock_load,
             patch(
-                "robinhood.core._core_robinhood.os.getenv",
-                return_value="env-token",
-            ) as mock_getenv,
-            patch(
-                "robinhood.core._core_robinhood.get_acc_id",
-                return_value="ACC123",
-            ) as mock_get_acc_id,
-            patch("robinhood.core._core_robinhood.get_token") as mock_get_token,
+                "robinhood.core._core_robinhood.OptionCache",
+                return_value=cache,
+            ) as mock_option_cache,
             patch(
                 "robinhood.core._core_robinhood.RobinhoodAsyncHTTPClient",
                 return_value=http_client,
@@ -60,96 +68,123 @@ class TestCoreRobinhoodInit(unittest.TestCase):
         ):
             client = Robinhood(
                 config_path="/tmp",
-                enable_cache=False,
+                browser_type=FakeBrowser,
                 logging_level=None,
             )
 
-        self.addCleanup(self.close_client_loop, client)
-        self.assertEqual("ACC123", client.user_id)
-        self.assertEqual(config_dir / ".env", client.env_path)
-        self.assertIs(http_client, client._async_http_client)
+        self.track_client(client)
+        assert "ACC123" == client.user_id
+        assert isinstance(client.browser_type, FakeBrowser)
+        assert cache is client._db_cache
+        client.browser_type.get_token_mock.assert_called_once_with()
         mock_set_up.assert_called_once_with(Path("/tmp"))
-        mock_load.assert_called_once_with(dotenv_path=config_dir / ".env")
-        mock_getenv.assert_called_once_with("BEARER_TOKEN")
-        mock_get_acc_id.assert_called_once_with("env-token")
-        mock_get_token.assert_not_called()
-        mock_http_client.assert_called_once_with("env-token", None)
-
-    def test_init_extracts_browser_token_after_invalid_env_account(self):
-        config_dir = Path("/tmp/meow-config")
-
-        with (
-            patch(
-                "robinhood.core._core_robinhood.set_up",
-                return_value=config_dir,
-            ),
-            patch("robinhood.core._core_robinhood.load_dotenv"),
-            patch(
-                "robinhood.core._core_robinhood.os.getenv",
-                return_value="env-token",
-            ),
-            patch(
-                "robinhood.core._core_robinhood.get_acc_id",
-                return_value=403,
-            ),
-            patch(
-                "robinhood.core._core_robinhood.get_token",
-                return_value=("browser-token", "ACC123"),
-            ) as mock_get_token,
-            patch(
-                "robinhood.core._core_robinhood.RobinhoodAsyncHTTPClient"
-            ) as mock_http_client,
-        ):
-            client = Robinhood(
-                config_path="/tmp",
-                enable_cache=False,
-                open_browser=False,
-                write_env=False,
-                logging_level=None,
-            )
-
-        self.addCleanup(self.close_client_loop, client)
-        self.assertEqual("ACC123", client.user_id)
-        mock_get_token.assert_called_once_with(
-            env_path=config_dir / ".env",
-            open_browser=False,
-            write_env=False,
+        mock_option_cache.assert_called_once_with(
+            config_dir / "meow-meow-hood.db",
+            True,
         )
         mock_http_client.assert_called_once_with("browser-token", None)
+        assert http_client is client._async_http_client
 
-    def test_init_raises_when_no_token_is_available(self):
-        loop = asyncio.new_event_loop()
-        self.addCleanup(loop.close)
+    def test_init_skips_cache_setup_when_cache_is_disabled(self) -> None:
+        with (
+            patch("robinhood.core._core_robinhood.set_up") as mock_set_up,
+            patch(
+                "robinhood.core._core_robinhood.OptionCache"
+            ) as mock_option_cache,
+        ):
+            client = Robinhood(
+                browser_type=FakeBrowser,
+                enable_cache=False,
+                logging_level=None,
+            )
+
+        self.track_client(client)
+        assert client._db_cache is None
+        mock_set_up.assert_not_called()
+        mock_option_cache.assert_not_called()
+
+    def test_init_raises_when_browser_returns_no_token(self) -> None:
+        class EmptyBrowser(FakeBrowser):
+            token = None
 
         with (
             patch(
-                "robinhood.core._core_robinhood.asyncio.new_event_loop",
-                return_value=loop,
-            ),
-            patch(
-                "robinhood.core._core_robinhood.set_up",
-                return_value=Path("/tmp/meow-config"),
-            ),
-            patch("robinhood.core._core_robinhood.load_dotenv"),
-            patch(
-                "robinhood.core._core_robinhood.os.getenv",
-                return_value=None,
-            ),
-            patch("robinhood.core._core_robinhood.get_token") as mock_get_token,
-            patch(
                 "robinhood.core._core_robinhood.RobinhoodAsyncHTTPClient"
             ) as mock_http_client,
+            pytest.raises(TokenExtractionError, match="Bearer token"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "Bearer token"):
-                Robinhood(
-                    extract_token=False,
-                    enable_cache=False,
-                    logging_level=None,
-                )
+            Robinhood(
+                browser_type=EmptyBrowser,
+                enable_cache=False,
+                logging_level=None,
+            )
 
-        mock_get_token.assert_not_called()
         mock_http_client.assert_not_called()
 
+    def test_refresh_access_token_opens_stale_browser_and_updates_http_token(
+        self,
+    ) -> None:
+        browser = FakeBrowser()
+        browser.last_accessed_greater_than_n_days_mock.return_value = True
+        http_client = SimpleNamespace(
+            access_token="old-token",
+            update_session_token=Mock(),
+            session=object(),
+            close=Mock(),
+        )
+        client = build_robinhood_client(http_client=http_client, db_cache=None)
+        client.browser_type = browser
+        self.track_client(client)
 
-if __name__ == "__main__":
-    unittest.main()
+        with patch(
+            "robinhood.core._core_robinhood._refresh_access_token",
+            return_value="new-token",
+        ) as mock_refresh:
+            client.refresh_access_token(time_until_close=3, headless=False)
+
+        browser.open_and_close_browser_mock.assert_called_once_with(
+            retries=3,
+            time_until_close=3,
+            headless=False,
+        )
+        mock_refresh.assert_called_once_with("old-token", browser)
+        http_client.update_session_token.assert_called_once_with("new-token")
+        assert "new-token" == http_client.access_token
+        assert http_client.session is None
+
+    def test_refresh_access_token_can_skip_browser_open(self) -> None:
+        browser = FakeBrowser()
+        browser.last_accessed_greater_than_n_days_mock.return_value = True
+        http_client = SimpleNamespace(
+            access_token="old-token",
+            update_session_token=Mock(),
+            session=None,
+            close=Mock(),
+        )
+        client = build_robinhood_client(http_client=http_client, db_cache=None)
+        client.browser_type = browser
+        self.track_client(client)
+
+        with patch(
+            "robinhood.core._core_robinhood._refresh_access_token",
+            return_value=None,
+        ):
+            client.refresh_access_token(auto_open_browser=False)
+
+        browser.open_and_close_browser_mock.assert_not_called()
+        http_client.update_session_token.assert_not_called()
+        assert "old-token" == http_client.access_token
+
+    def test_return_access_token_expiry_reads_http_client_token(self) -> None:
+        http_client = SimpleNamespace(access_token="token", close=Mock())
+        client = build_robinhood_client(http_client=http_client, db_cache=None)
+        self.track_client(client)
+
+        with patch(
+            "robinhood.core._core_robinhood._return_access_token_expiry",
+            return_value=123,
+        ) as mock_expiry:
+            result = client.get_access_token_expiry()
+
+        assert 123 == result
+        mock_expiry.assert_called_once_with("token")

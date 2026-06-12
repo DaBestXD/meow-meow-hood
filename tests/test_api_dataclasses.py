@@ -1,5 +1,6 @@
-import unittest
 from dataclasses import asdict
+
+import pytest
 
 from robinhood.dataclasses.api_dataclasses import (
     IndexInfo,
@@ -28,11 +29,11 @@ from tests.support import (
 )
 
 
-class TestApiDataclasses(unittest.TestCase):
+class TestApiDataclasses:
     def test_option_request_normalizes_symbol(self):
         request = OptionRequest(symbol="spy", exp_date="2026-04-17")
 
-        self.assertEqual("SPY", request.symbol)
+        assert "SPY" == request.symbol
 
     def test_option_greek_data_from_json_coerces_numeric_fields(self):
         payload = asdict(build_option_greek_data())
@@ -43,10 +44,10 @@ class TestApiDataclasses(unittest.TestCase):
 
         greek_data = OptionGreekData.from_json(payload)
 
-        self.assertEqual(1.25, greek_data.ask_price)
-        self.assertEqual(7, greek_data.ask_size)
-        self.assertEqual(0.0, greek_data.bid_price)
-        self.assertEqual(0.0, greek_data.vega)
+        assert 1.25 == greek_data.ask_price
+        assert 7 == greek_data.ask_size
+        assert 0.0 == greek_data.bid_price
+        assert 0.0 == greek_data.vega
 
     def test_stock_info_from_json_coerces_float_fields_and_preserves_keys(self):
         payload = {
@@ -70,12 +71,12 @@ class TestApiDataclasses(unittest.TestCase):
 
         stock_info = StockInfo.from_json(payload)
 
-        self.assertEqual("SPY", stock_info.symbol)
-        self.assertEqual("chain-id", stock_info.tradable_chain_id)
-        self.assertEqual(0.5, stock_info.margin_initial_ratio)
-        self.assertEqual(0.0, stock_info.maintenance_ratio)
-        self.assertEqual(0.25, stock_info.day_trade_ratio)
-        self.assertEqual(0.0, stock_info.min_tick_size)
+        assert "SPY" == stock_info.symbol
+        assert "chain-id" == stock_info.tradable_chain_id
+        assert 0.5 == stock_info.margin_initial_ratio
+        assert 0.0 == stock_info.maintenance_ratio
+        assert 0.25 == stock_info.day_trade_ratio
+        assert 0.0 == stock_info.min_tick_size
 
     def test_instrument_quote_from_json_coerces_ints_and_floats(self):
         payload = build_instrument_quote_payload()
@@ -84,10 +85,10 @@ class TestApiDataclasses(unittest.TestCase):
 
         quote = InstrumentQuote.from_json(payload)
 
-        self.assertEqual(10.5, quote.ask_price)
-        self.assertEqual(11, quote.ask_size)
-        self.assertEqual(9, quote.bid_size)
-        self.assertEqual(0.0, quote.last_trade_price)
+        assert 10.5 == quote.ask_price
+        assert 11 == quote.ask_size
+        assert 9 == quote.bid_size
+        assert 0.0 == quote.last_trade_price
 
     def test_stock_position_from_json_keeps_selected_fields(self):
         payload = {
@@ -100,96 +101,83 @@ class TestApiDataclasses(unittest.TestCase):
 
         position = StockPosition.from_json(payload)
 
-        self.assertEqual("TQQQ", position.symbol)
-        self.assertEqual(0.92278, position.quantity)
-        self.assertEqual("long", position.type)
-        self.assertEqual(27.83, position.clearing_average_cost)
-        self.assertAlmostEqual(25.68, position.total_notional, places=2)
-        self.assertEqual(
-            "91f7ea28-e413-4ca4-b9fa-91f5822f8b8d",
-            position.instrument_id,
-        )
+        assert "TQQQ" == position.symbol
+        assert 0.92278 == position.quantity
+        assert "long" == position.type
+        assert 27.83 == position.clearing_average_cost
+        assert position.total_notional == pytest.approx(25.68, abs=0.01)
+        assert "91f7ea28-e413-4ca4-b9fa-91f5822f8b8d" == position.instrument_id
 
     def test_index_info_from_json_uses_simple_name_and_empty_chain_ids(self):
         payload = build_index_info_payload(tradable_chain_ids=[])
 
         index_info = IndexInfo.from_json(payload)
 
-        self.assertEqual("CBOE Volatility Index", index_info.simple_name)
-        self.assertEqual("VIX", index_info.symbol)
-        self.assertEqual([], index_info.tradable_chain_ids)
+        assert "CBOE Volatility Index" == index_info.simple_name
+        assert "VIX" == index_info.symbol
+        assert [] == index_info.tradable_chain_ids
 
     def test_index_quote_from_json_coerces_numeric_value(self):
         quote = IndexQuote.from_json(build_index_quote_payload(value="19.45"))
 
-        self.assertEqual("VIX", quote.symbol)
-        self.assertEqual(19.45, quote.value)
-        self.assertEqual("index-id", quote.instrument_id)
+        assert "VIX" == quote.symbol
+        assert 19.45 == quote.value
+        assert "index-id" == quote.instrument_id
 
     def test_option_position_from_json_coerces_float_fields(self):
         position = OptionPosition.from_json(build_option_position_payload())
 
-        self.assertEqual("SPY", position.chain_symbol)
-        self.assertEqual(1.5, position.average_price)
-        self.assertEqual(2.0, position.quantity)
-        self.assertEqual(100.0, position.trade_value_multiplier)
+        assert "SPY" == position.chain_symbol
+        assert 1.5 == position.average_price
+        assert 2.0 == position.quantity
+        assert 100.0 == position.trade_value_multiplier
 
     def test_stock_order_from_json_uses_total_notional_as_price(self):
         order = StockOrder.from_json(build_stock_order_payload())
 
-        self.assertEqual("order-id", order.id)
-        self.assertEqual(2.0, order.quantity)
-        self.assertEqual(10.5, order.average_price)
-        self.assertEqual(21.0, order.price)
+        assert "order-id" == order.id
+        assert 2.0 == order.quantity
+        assert 10.5 == order.average_price
+        assert 21.0 == order.price
 
     def test_option_order_from_json_builds_legs_and_net_amount_price(self):
         order = OptionOrderHistory.from_json(build_option_order_payload())
 
-        self.assertEqual("option-order-id", order.id)
-        self.assertEqual(1.0, order.quantity)
-        self.assertEqual(1.25, order.price)
-        self.assertEqual(1, len(order.legs))
-        self.assertEqual("buy", order.legs[0].side)
-        self.assertEqual(500.0, order.legs[0].strike_price)
-        self.assertEqual(1, order.legs[0].ratio_quantity)
+        assert "option-order-id" == order.id
+        assert 1.0 == order.quantity
+        assert 1.25 == order.price
+        assert 1 == len(order.legs)
+        assert "buy" == order.legs[0].side
+        assert 500.0 == order.legs[0].strike_price
+        assert 1 == order.legs[0].ratio_quantity
 
     def test_stock_order_response_from_json_builds_nested_amounts(self):
         order = StockOrderResponse.from_json(
             build_stock_order_response_payload()
         )
 
-        self.assertEqual(
-            "6a05547e-6b7d-4a8b-8275-f925ab3b4e6c",
-            order.id,
-        )
-        self.assertEqual(1.0, order.quantity)
-        self.assertEqual(0.0, order.cumulative_quantity)
-        self.assertEqual(1.35, order.price)
-        self.assertIsNone(order.average_price)
-        self.assertEqual(0.0, order.dollar_based_amount)
-        self.assertEqual(
-            {
-                "amount": "1.35",
-                "currency_code": "USD",
-                "currency_id": "1072fc76-1862-41ab-82c2-485837590762",
-            },
-            order.total_notional,
-        )
-        self.assertEqual(
-            "https://api.robinhood.com/orders/6a05547e-6b7d-4a8b-8275-f925ab3b4e6c/cancel/",
-            order.cancel,
+        assert "6a05547e-6b7d-4a8b-8275-f925ab3b4e6c" == order.id
+        assert 1.0 == order.quantity
+        assert 0.0 == order.cumulative_quantity
+        assert 1.35 == order.price
+        assert order.average_price is None
+        assert 0.0 == order.dollar_based_amount
+        assert {
+            "amount": "1.35",
+            "currency_code": "USD",
+            "currency_id": "1072fc76-1862-41ab-82c2-485837590762",
+        } == order.total_notional
+        assert (
+            "https://api.robinhood.com/orders/6a05547e-6b7d-4a8b-8275-f925ab3b4e6c/cancel/"  # noqa: E501
+            == order.cancel
         )
 
     def test_orderbook_from_json_builds_bid_and_ask_levels(self):
         orderbook = OrderBook.from_json(build_orderbook_payload())
 
-        self.assertEqual("ask", orderbook.asks[0].side)
-        self.assertEqual(501.25, orderbook.asks[0].price)
-        self.assertEqual(10, orderbook.asks[0].quantity)
-        self.assertEqual("bid", orderbook.bids[0].side)
-        self.assertEqual(501.0, orderbook.bids[0].price)
-        self.assertEqual(8, orderbook.bids[0].quantity)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "ask" == orderbook.asks[0].side
+        assert 501.25 == orderbook.asks[0].price
+        assert 10 == orderbook.asks[0].quantity
+        assert "bid" == orderbook.bids[0].side
+        assert 501.0 == orderbook.bids[0].price
+        assert 8 == orderbook.bids[0].quantity

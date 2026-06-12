@@ -18,7 +18,7 @@ def args() -> argparse.Namespace:
         "-d",
         "--directory",
         type=str,
-        default=Path("./").resolve(),
+        default=str(Path("./").resolve()),
     )
     parser.add_argument(
         "-ti",
@@ -34,7 +34,7 @@ def parse_dict(json_dict: dict[str, Any]) -> list[str]:
     for k, v in json_dict.items():
         try:
             v = float(v)
-        except ValueError:
+        except (ValueError, TypeError):
             pass
         return_val.append(f"\t{k}: {type(v).__name__}\n")
     return return_val
@@ -51,7 +51,7 @@ def json_payload_to_dataclass(
     or a python repr of the json payload
     """
     if isinstance(json_payload, str):
-        json_payload = json.loads(json_payload)
+        json_payload = json.loads(json_payload.replace("'", '"'))
     if not isinstance(json_payload, dict):
         raise ValueError("json_payload must be dictionary")
     ftext = str(json_payload)
@@ -78,8 +78,8 @@ def main() -> None:
     cmd_args = args()
     json_payload_to_dataclass(
         cmd_args.text,
-        cmd_args.directory,
         cmd_args.title,
+        cmd_args.directory,
     )
 
 

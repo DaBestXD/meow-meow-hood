@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import unittest
 from dataclasses import asdict
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import pytest
 
 from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.constants import API_OPTIONS_GREEKS_DATA, PARAM_OPTION_IDS
@@ -44,7 +45,8 @@ def build_async_client(*, db_cache: object | None = None) -> AsyncRobinhood:
     return client
 
 
-class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
+@pytest.mark.asyncio
+class TestAsyncOptionGreeks:
     async def test_resolve_option_greeks_from_ids_chunks_dedupes_and_rebuilds(
         self,
     ) -> None:
@@ -71,18 +73,14 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
             [req1, req2, req3], req_to_ids
         )
 
-        self.assertEqual(2, len(calls))
-        self.assertEqual(200, len(calls[0]))
-        self.assertEqual(5, len(calls[1]))
-        self.assertEqual(
-            req1_ids,
-            [greek.instrument_id for greek in result[req1]],
-        )
-        self.assertEqual(
-            [option_id for option_id in req2_ids if option_id != "missing"],
-            [greek.instrument_id for greek in result[req2]],
-        )
-        self.assertEqual([], result[req3])
+        assert 2 == len(calls)
+        assert 200 == len(calls[0])
+        assert 5 == len(calls[1])
+        assert req1_ids == [greek.instrument_id for greek in result[req1]]
+        assert [
+            option_id for option_id in req2_ids if option_id != "missing"
+        ] == [greek.instrument_id for greek in result[req2]]
+        assert [] == result[req3]
 
     async def test_resolve_option_greeks_from_ids_returns_empty_for_empty_ids(
         self,
@@ -95,7 +93,7 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
             [request], {request: []}
         )
 
-        self.assertEqual({request: []}, result)
+        assert {request: []} == result
         client._get_option_greek_data.assert_not_awaited()
 
     async def test_resolve_option_greeks_starts_all_chunks_before_failure(
@@ -122,34 +120,32 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
 
         client._get_option_greek_data = fake_get_option_greek_data
 
-        with self.assertRaisesRegex(RuntimeError, "boom"):
+        with pytest.raises(RuntimeError, match="boom"):
             await client._resolve_option_greeks_from_ids(
                 [request], {request: option_ids}
             )
 
-        self.assertTrue(second_chunk_started.is_set())
+        assert second_chunk_started.is_set()
         release_second_chunk.set()
         await asyncio.wait_for(second_chunk_finished.wait(), timeout=1)
 
     async def test_no_db_option_greeks_returns_empty_when_no_chains(
         self,
+        caplog,
     ) -> None:
         client = build_async_client()
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         client._get_option_chain_data = AsyncMock(return_value=None)
         client._get_oi_helper = AsyncMock()
 
-        with self.assertLogs(
-            "robinhood.core._option_impl",
-            level="WARNING",
-        ) as logs:
+        with caplog.at_level(
+            "WARNING",
+            logger="robinhood.core._option_impl",
+        ):
             result = await client._no_db_option_greeks_batch_request([request])
 
-        self.assertEqual({request: []}, result)
-        self.assertIn(
-            "No chains returned for all option request",
-            logs.output[0],
-        )
+        assert {request: []} == result
+        assert "No chains returned for all option request" in caplog.text
         client._get_oi_helper.assert_not_awaited()
 
     async def test_no_db_option_greeks_batch_request_uses_single_chain_object(
@@ -176,7 +172,7 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
 
         result = await client._no_db_option_greeks_batch_request([request])
 
-        self.assertEqual(expected, result)
+        assert expected == result
         client._get_oi_helper.assert_awaited_once_with(
             [request],
             {"SPY": "chain-id"},
@@ -198,7 +194,7 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
 
         result = await client._get_option_greeks_batch_request(request)
 
-        self.assertEqual(expected, result)
+        assert expected == result
         client._no_db_option_greeks_batch_request.assert_awaited_once_with(
             [request]
         )
@@ -234,13 +230,10 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
             [cached_request, missed_request]
         )
 
-        self.assertEqual(
-            {
-                cached_request: cached_result[cached_request],
-                missed_request: live_result[missed_request],
-            },
-            result,
-        )
+        assert {
+            cached_request: cached_result[cached_request],
+            missed_request: live_result[missed_request],
+        } == result
         client._resolve_option_greeks_from_ids.assert_awaited_once_with(
             [cached_request],
             {cached_request: ["cached-1", "cached-2"]},
@@ -249,7 +242,10 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
             [missed_request]
         )
 
-    async def test_get_option_greeks_batch_request_logs_cache_hit(self) -> None:
+    async def test_get_option_greeks_batch_request_logs_cache_hit(
+        self,
+        caplog,
+    ) -> None:
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         client = build_async_client(
             db_cache=FakeCache(
@@ -262,31 +258,31 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
         )
         client._no_db_option_greeks_batch_request = AsyncMock(return_value={})
 
-        with self.assertLogs(
-            "robinhood.core._option_impl",
-            level="DEBUG",
-        ) as logs:
+        with caplog.at_level(
+            "DEBUG",
+            logger="robinhood.core._option_impl",
+        ):
             result = await client._get_option_greeks_batch_request(request)
 
-        self.assertEqual({request: []}, result)
-        self.assertIn(
-            "get_option_greeks_batch_request cache hit for SPY",
-            logs.output[0],
+        assert {request: []} == result
+        assert (
+            "get_option_greeks_batch_request cache hit for SPY" in caplog.text
         )
 
     async def test_get_option_greek_data_returns_empty_without_ids(
         self,
+        caplog,
     ) -> None:
         client = build_async_client()
 
-        with self.assertLogs(
-            "robinhood.core._option_impl",
-            level="WARNING",
-        ) as logs:
+        with caplog.at_level(
+            "WARNING",
+            logger="robinhood.core._option_impl",
+        ):
             result = await client._get_option_greek_data([])
 
-        self.assertEqual([], result)
-        self.assertIn("warning no option id supplied", logs.output[0])
+        assert [] == result
+        assert "warning no option id supplied" in caplog.text
         client._async_http_client._get.assert_not_awaited()
 
     async def test_get_option_greek_data_fetches_payloads_for_option_ids(
@@ -298,7 +294,7 @@ class TestAsyncOptionGreeks(unittest.IsolatedAsyncioTestCase):
 
         result = await client._get_option_greek_data(["id-1"])
 
-        self.assertEqual([greek], result)
+        assert [greek] == result
         client._async_http_client._get.assert_awaited_once_with(
             endpoint=API_OPTIONS_GREEKS_DATA,
             params={PARAM_OPTION_IDS: "id-1"},

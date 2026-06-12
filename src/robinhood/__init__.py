@@ -17,6 +17,7 @@
 import importlib.metadata as metadata
 
 from robinhood.dataclasses.api_dataclasses import (
+    AccountValue,
     AchTransfer,
     BidAsk,
     CurrencyQuote,
@@ -48,8 +49,26 @@ from robinhood.dataclasses.watchlist_classes import (
     OptionStrategy,
     WatchList,
 )
+from robinhood.robinhood_errors import (
+    AccountIdNotFoundError,
+    AuthenticationError,
+    ConfigurationError,
+    EndpointNotFoundError,
+    FailedToCreateWatchlistError,
+    FailedToDeleteWatchlistError,
+    FailedToModifyWatchlistError,
+    InstrumentNotFoundError,
+    InvalidTypeError,
+    MalformedOrderError,
+    NoFutureProductsReturnedError,
+    OrderFailedError,
+    RateLimitError,
+    RobinhoodError,
+    TokenExtractionError,
+)
 
 from .async_robinhood_class import AsyncRobinhood
+from .browser_functions.browser_token_parser import Chrome, Firefox
 from .sync_robinhood_class import Robinhood
 
 try:
@@ -58,20 +77,34 @@ except metadata.PackageNotFoundError:
     __version__ = "0.0.0"
 
 __all__ = [
+    "AccountIdNotFoundError",
     "AchTransfer",
+    "AuthenticationError",
+    "AccountValue",
     "AsyncRobinhood",
     "BidAsk",
+    "ConfigurationError",
+    "Chrome",
     "CurrencyPair",
     "CurrencyQuote",
-    "InstrumentQuote",
+    "EndpointNotFoundError",
+    "FailedToCreateWatchlistError",
+    "FailedToDeleteWatchlistError",
+    "FailedToModifyWatchlistError",
+    "Firefox",
     "Future",
     "FuturesContract",
     "FuturesProduct",
     "FuturesQuote",
     "Index",
-    "Instrument",
     "IndexInfo",
     "IndexQuote",
+    "Instrument",
+    "InstrumentNotFoundError",
+    "InstrumentQuote",
+    "InvalidTypeError",
+    "MalformedOrderError",
+    "NoFutureProductsReturnedError",
     "OptionChain",
     "OptionGreekData",
     "OptionInstrument",
@@ -80,13 +113,17 @@ __all__ = [
     "OptionPosition",
     "OptionRequest",
     "OptionStrategy",
+    "OrderFailedError",
     "OrderBook",
+    "RateLimitError",
     "Robinhood",
     "RobinhoodAccount",
+    "RobinhoodError",
     "StockInfo",
     "StockOrder",
     "StockOrderResponse",
     "StockPosition",
+    "TokenExtractionError",
     "WatchList",
     "__version__",
 ]

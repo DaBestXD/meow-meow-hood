@@ -43,6 +43,7 @@ API_WATCHLIST_DEFAULT = "/discovery/lists/default/"
 API_WATCHLIST_ITEMS = "/discovery/lists/items/"
 # Bonfire endpoints
 API_UNIFIED_TRANSFERS = "/paymenthub/unified_transfers/"
+API_ACCOUNT_LIVE = "/portfolio/account/"
 # Nummus endpoints
 API_CURRENCY_PAIR = "/currency_pairs/"
 # Params

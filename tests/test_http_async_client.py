@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
+import pytest
 
+from robinhood import AuthenticationError, RateLimitError
 from robinhood.constants import BASE_API_BONFIRE_LINK, BASE_API_LINK
 from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
-from robinhood.errors import AuthenticationError, RateLimitError
 from tests.support import build_http_client
 
 
@@ -66,8 +66,9 @@ class FakeSession:
         return self._delete_responses.pop(0)
 
 
-class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
+class TestRobinhoodAsyncHTTPClient:
     @patch("robinhood.core._http_async_client.aiohttp.ClientSession")
+    @pytest.mark.asyncio
     async def test_create_client_session_sets_headers_and_user_agent(
         self,
         mock_client_session,
@@ -80,17 +81,18 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
 
         result = await client.create_client_session()
 
-        self.assertIs(session, result)
+        assert session is result
         mock_client_session.assert_called_once()
-        self.assertEqual(
-            "Bearer bearer-token",
-            mock_client_session.call_args.kwargs["headers"]["Authorization"],
+        assert (
+            "Bearer bearer-token"
+            == mock_client_session.call_args.kwargs["headers"]["Authorization"]
         )
-        self.assertEqual(
-            "agent/1.0",
-            mock_client_session.call_args.kwargs["headers"]["User-Agent"],
+        assert (
+            "agent/1.0"
+            == mock_client_session.call_args.kwargs["headers"]["User-Agent"]
         )
 
+    @pytest.mark.asyncio
     async def test_close_awaits_underlying_session(self) -> None:
         session = Mock()
         session.close = AsyncMock()
@@ -100,6 +102,7 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
 
         session.close.assert_awaited_once_with()
 
+    @pytest.mark.asyncio
     async def test_page_get_accumulates_results_until_next_link_is_empty(
         self,
     ) -> None:
@@ -116,12 +119,10 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
 
         result = await client._page_get("page-2", [{"id": 1}])
 
-        self.assertEqual([{"id": 1}, {"id": 2}, {"id": 3}], result)
-        self.assertEqual(
-            [{"url": "page-2"}, {"url": "page-3"}],
-            session.get_calls,
-        )
+        assert [{"id": 1}, {"id": 2}, {"id": 3}] == result
+        assert [{"url": "page-2"}, {"url": "page-3"}] == session.get_calls
 
+    @pytest.mark.asyncio
     async def test_page_get_calls_error_handler_on_response_error(self) -> None:
         error = aiohttp.ClientResponseError(None, (), status=429)
         session = FakeSession(get_responses=[FakeResponse(error=error)])
@@ -131,11 +132,12 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
             side_effect=RuntimeError("boom")
         )
 
-        with self.assertRaisesRegex(RuntimeError, "boom"):
+        with pytest.raises(RuntimeError, match="boom"):
             await client._page_get("page-2", [{"id": 1}])
 
         client._error_status_code_handler.assert_called_once_with("page-2", 429)
 
+    @pytest.mark.asyncio
     async def test_get_returns_results_from_single_page_payload(self) -> None:
         session = FakeSession(
             get_responses=[
@@ -150,17 +152,15 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
             params={"symbols": "SPY"},
         )
 
-        self.assertEqual([{"id": 1}], result)
-        self.assertEqual(
-            [
-                {
-                    "url": BASE_API_LINK + "/quotes/",
-                    "params": {"symbols": "SPY"},
-                }
-            ],
-            session.get_calls,
-        )
+        assert [{"id": 1}] == result
+        assert [
+            {
+                "url": BASE_API_LINK + "/quotes/",
+                "params": {"symbols": "SPY"},
+            }
+        ] == session.get_calls
 
+    @pytest.mark.asyncio
     async def test_get_wraps_single_payload_when_results_key_is_missing(
         self,
     ) -> None:
@@ -177,8 +177,9 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
             params={"symbols": "SPY"},
         )
 
-        self.assertEqual([{"symbol": "SPY", "price": "100.0"}], result)
+        assert [{"symbol": "SPY", "price": "100.0"}] == result
 
+    @pytest.mark.asyncio
     async def test_get_follows_pagination_when_next_link_exists(self) -> None:
         session = FakeSession(
             get_responses=[
@@ -191,9 +192,10 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
 
         result = await client._get(endpoint="/options/")
 
-        self.assertEqual([{"id": 1}, {"id": 2}], result)
+        assert [{"id": 1}, {"id": 2}] == result
         client._page_get.assert_awaited_once_with("page-2", results=[{"id": 1}])
 
+    @pytest.mark.asyncio
     async def test_post_returns_json_from_successful_response(self) -> None:
         session = FakeSession(
             post_responses=[FakeResponse(payload={"id": "order-id"})]
@@ -207,18 +209,16 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
             data={"symbol": "SPY"},
         )
 
-        self.assertEqual({"id": "order-id"}, result)
-        self.assertEqual(
-            [
-                {
-                    "url": BASE_API_BONFIRE_LINK + "/orders/",
-                    "data": {"symbol": "SPY"},
-                    "json": None,
-                }
-            ],
-            session.post_calls,
-        )
+        assert {"id": "order-id"} == result
+        assert [
+            {
+                "url": BASE_API_BONFIRE_LINK + "/orders/",
+                "data": {"symbol": "SPY"},
+                "json": None,
+            }
+        ] == session.post_calls
 
+    @pytest.mark.asyncio
     async def test_post_calls_error_handler_on_response_error(self) -> None:
         error = aiohttp.ClientResponseError(None, (), status=400)
         session = FakeSession(post_responses=[FakeResponse(error=error)])
@@ -232,12 +232,13 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
             data={"symbol": "SPY"},
         )
 
-        self.assertIsNone(result)
+        assert result is None
         client._error_status_code_handler.assert_called_once_with(
             "/orders/",
             400,
         )
 
+    @pytest.mark.asyncio
     async def test_delete_returns_json_from_successful_response(self) -> None:
         session = FakeSession(
             delete_responses=[FakeResponse(payload={"deleted": True})]
@@ -250,18 +251,16 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
             base_api_link=BASE_API_BONFIRE_LINK,
         )
 
-        self.assertEqual({"deleted": True}, result)
-        self.assertEqual(
-            [
-                {
-                    "url": BASE_API_BONFIRE_LINK + "/screeners/watchlist-id",
-                    "data": None,
-                    "json": None,
-                }
-            ],
-            session.delete_calls,
-        )
+        assert {"deleted": True} == result
+        assert [
+            {
+                "url": BASE_API_BONFIRE_LINK + "/screeners/watchlist-id",
+                "data": None,
+                "json": None,
+            }
+        ] == session.delete_calls
 
+    @pytest.mark.asyncio
     async def test_delete_returns_none_for_empty_success_response(self) -> None:
         session = FakeSession(
             delete_responses=[FakeResponse(payload={}, status=204)]
@@ -271,18 +270,16 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
 
         result = await client._delete(endpoint="/watchlists/item-id/")
 
-        self.assertIsNone(result)
-        self.assertEqual(
-            [
-                {
-                    "url": BASE_API_LINK + "/watchlists/item-id/",
-                    "data": None,
-                    "json": None,
-                }
-            ],
-            session.delete_calls,
-        )
+        assert result is None
+        assert [
+            {
+                "url": BASE_API_LINK + "/watchlists/item-id/",
+                "data": None,
+                "json": None,
+            }
+        ] == session.delete_calls
 
+    @pytest.mark.asyncio
     async def test_delete_calls_error_handler_on_response_error(self) -> None:
         error = aiohttp.ClientResponseError(None, (), status=400)
         session = FakeSession(delete_responses=[FakeResponse(error=error)])
@@ -295,7 +292,7 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
             base_api_link=BASE_API_BONFIRE_LINK,
         )
 
-        self.assertIsNone(result)
+        assert result is None
         client._error_status_code_handler.assert_called_once_with(
             "/screeners/watchlist-id",
             400,
@@ -304,27 +301,25 @@ class TestRobinhoodAsyncHTTPClient(unittest.IsolatedAsyncioTestCase):
     def test_error_status_code_handler_raises_on_429(self) -> None:
         client = build_http_client()
 
-        with self.assertRaises(RateLimitError):
+        with pytest.raises(RateLimitError):
             client._error_status_code_handler("/quotes/", 429)
 
     def test_error_status_code_handler_raises_authentication_error_on_403(
         self,
+        caplog,
     ) -> None:
         client = build_http_client()
 
         with (
-            self.assertLogs(
-                "robinhood.core._http_async_client",
-                level="CRITICAL",
-            ) as logs,
-            self.assertRaisesRegex(
+            caplog.at_level(
+                "CRITICAL",
+                logger="robinhood.core._http_async_client",
+            ),
+            pytest.raises(
                 AuthenticationError,
-                "Access token invalid, relogin into robinhood",
+                match="Access token invalid, relogin into robinhood",
             ),
         ):
             client._error_status_code_handler("/quotes/", 403)
 
-        self.assertIn(
-            "Access token invalid, relogin into robinhood",
-            logs.output[0],
-        )
+        assert "Access token invalid, relogin into robinhood" in caplog.text

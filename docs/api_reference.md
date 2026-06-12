@@ -15,15 +15,15 @@ Both clients share the same constructor parameters:
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `config_path` | `Path.cwd()` | Parent directory where `.meow-meow-config` is created. |
-| `extract_token` | `True` | Read a Robinhood token from local browser storage. |
-| `write_env` | `True` | Persist `BEARER_TOKEN` and `ACCOUNT_NUMBER` to `.env` after token extraction. |
-| `open_browser` | `True` | Open browsers during refresh when the saved token is rejected. |
 | `user_agent` | `None` | Optional `User-Agent` header for HTTP requests. |
 | `enable_cache` | `True` | Enable the local SQLite option metadata cache. |
 | `prune_expired_options` | `True` | Remove expired option rows when opening the cache. |
 | `logging_level` | `logging.INFO` | Logging level passed to the package logger setup. |
 | `log_handler` | package default | Optional logging handler override. |
-| `access_token` | `None` | Manually supplied bearer token. |
+| `browser_type` | `Chrome` | Browser class used for local token discovery. |
+
+`browser_type` can be `Chrome` or `Firefox`. The selected browser profile must
+already be logged in to Robinhood.
 
 ## Market Data
 
@@ -44,7 +44,7 @@ Both clients share the same constructor parameters:
 | Method | Return Type |
 | --- | --- |
 | `get_expiration_dates(symbol)` | `list[str]` or `None` |
-| `get_strike_prices(symbol=..., exp_date=...)` | `dict[OptionRequest, list[float]]` |
+| `get_strike_prices(symbol=..., exp_date=...)` | `list[float]`, `(list[float], list[float])`, or `None` |
 | `get_option_chain_data(symbol)` | `OptionChain`, `list[OptionChain]`, or `None` |
 | `get_option_greeks_batch_request(option_requests)` | `dict[OptionRequest, list[OptionGreekData]]` |
 | `no_db_option_greeks_batch_request(option_requests)` | `dict[OptionRequest, list[OptionGreekData]]` |
@@ -79,9 +79,13 @@ for the given symbol.
 | Method | Description |
 | --- | --- |
 | `close()` | Close the HTTP session, cache connection, and event loop. |
-| `open_browser(browser, wait_time=10, days=1)` | Open Robinhood in a browser when local auth state is stale. |
-| `refresh_access_token()` | Refresh the active bearer token when a refreshed browser token is available. |
+| `refresh_access_token(...)` | Refresh the active bearer token from the selected browser. |
+| `get_access_token_expiry()` | Return the current access token expiry timestamp. |
 | `execute_custom_sql(query, args)` | Execute a cache SQL query when the cache is enabled. |
+
+`refresh_access_token()` accepts `browser`, `time_until_close`,
+`auto_open_browser`, and `headless`. When `auto_open_browser=True`, the selected
+browser may be opened briefly if local browser auth state is stale.
 
 ## Return Values And Errors
 
@@ -91,6 +95,6 @@ empty list when no matching option data is found.
 
 HTTP `401` and `403` responses raise `AuthenticationError`. HTTP `429` and
 `5xx` responses currently raise `NotImplementedError`. Trading helpers can
-raise package exceptions from `robinhood.errors` when an order cannot be
-validated locally.
+raise package exceptions from `robinhood.robinhood_errors` when an order cannot
+be validated locally.
 Better http error handling will be added.

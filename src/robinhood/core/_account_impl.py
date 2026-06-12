@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, overload
 from uuid import UUID
 
 import aiohttp
 
 from robinhood.constants import (
     API_ACCOUNT,
+    API_ACCOUNT_LIVE,
     API_NON_OPTION_ORDER_HISTORY,
     API_OPTION_ORDER_HISTORY,
     API_POSITIONS_NON_OPTIONS,
@@ -26,6 +27,7 @@ from robinhood.constants import (
 )
 from robinhood.core._typing_base import TypingBase
 from robinhood.dataclasses.api_dataclasses import (
+    AccountValue,
     AchTransfer,
     OptionOrderHistory,
     OptionPosition,
@@ -42,7 +44,7 @@ from robinhood.dataclasses.watchlist_classes import (
     WatchList,
     WatchListItem,
 )
-from robinhood.errors import (
+from robinhood.robinhood_errors import (
     FailedToCreateWatchlistError,
     FailedToDeleteWatchlistError,
     FailedToModifyWatchlistError,
@@ -328,6 +330,8 @@ class AccountImpl(TypingBase):
         Returns list of Watchlist classes
         To each item from the watchlist use `watchlist.items`
         This function will always return your options watchlist
+        (OptionStrategies can only appear in the options watchlist)
+
         Possible items:
         -`OptionStrategy`
         -`Instrument`
@@ -386,6 +390,16 @@ class AccountImpl(TypingBase):
                 items.append(Index.from_json(o))
         return items
 
+    @overload
+    async def _get_ach_transfers(
+        self, raw_json_response: Literal[False]
+    ) -> list[AchTransfer] | None: ...
+
+    @overload
+    async def _get_ach_transfers(
+        self, raw_json_response: Literal[True]
+    ) -> list[dict] | None: ...
+
     async def _get_ach_transfers(
         self, raw_json_response: bool = False
     ) -> list[AchTransfer] | list[dict] | None:
@@ -401,8 +415,18 @@ class AccountImpl(TypingBase):
             return res_json
         return [AchTransfer.from_json(r) for r in res_json if r]
 
+    @overload
     async def _get_accounts(
-        self, raw_json_response: bool = False
+        self, *, raw_json_response: Literal[False]
+    ) -> list[RobinhoodAccount] | list[dict] | None: ...
+
+    @overload
+    async def _get_accounts(
+        self, *, raw_json_response: Literal[True]
+    ) -> list[RobinhoodAccount] | list[dict] | None: ...
+
+    async def _get_accounts(
+        self, *, raw_json_response: bool = False
     ) -> list[RobinhoodAccount] | list[dict] | None:
         """
         [Public]
@@ -423,3 +447,17 @@ class AccountImpl(TypingBase):
         """
         self.user_id = acc_id
         return None
+
+    async def _get_account_value_impl(
+        self, acc_id: str | None = None
+    ) -> AccountValue | None:
+        """
+        [Public]
+        Uses the classes' self.user_id if acc_id is not provided
+        Returns an AccountValue dataclass
+        """
+        acc = self.user_id if not acc_id else acc_id
+        res_json = await self._async_http_client._get(
+            API_ACCOUNT_LIVE + f"{acc}/live", BASE_API_BONFIRE_LINK
+        )
+        return AccountValue.from_json(res_json[0])

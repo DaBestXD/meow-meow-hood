@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
+
+import pytest
 
 from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.constants import (
@@ -30,18 +31,17 @@ from tests.support import (
 )
 
 
-class TestAsyncMarketData(unittest.IsolatedAsyncioTestCase):
-    async def asyncTearDown(self) -> None:
-        client = getattr(self, "client", None)
-        if client and not client.event_loop.is_closed():
-            client.event_loop.close()
+@pytest.mark.asyncio
+class TestAsyncMarketData:
+    @pytest.fixture(autouse=True)
+    def _set_client_tracker(self, async_client_tracker) -> None:
+        self.track_client = async_client_tracker
 
     def make_client(self) -> AsyncRobinhood:
         client = build_async_robinhood_client(
             http_client=SimpleNamespace(_get=AsyncMock())
         )
-        self.client = client
-        return client
+        return self.track_client(client)
 
     async def test_get_stock_info_returns_none_for_empty_response(self):
         client = self.make_client()
@@ -49,7 +49,7 @@ class TestAsyncMarketData(unittest.IsolatedAsyncioTestCase):
 
         result = await client.get_stock_info("SPY")
 
-        self.assertIsNone(result)
+        assert result is None
         client._async_http_client._get.assert_awaited_once_with(
             endpoint=API_INSTRUMENTS,
             params={PARAM_SYMBOLS: "SPY"},
@@ -62,7 +62,7 @@ class TestAsyncMarketData(unittest.IsolatedAsyncioTestCase):
 
         result = await client.get_index_info("VIX")
 
-        self.assertEqual(IndexInfo.from_json(payload), result)
+        assert IndexInfo.from_json(payload) == result
         client._async_http_client._get.assert_awaited_once_with(
             endpoint=API_INDEXES,
             params={PARAM_SYMBOLS: "VIX"},
@@ -74,7 +74,7 @@ class TestAsyncMarketData(unittest.IsolatedAsyncioTestCase):
 
         result = await client.get_index_info("VIX")
 
-        self.assertIsNone(result)
+        assert result is None
 
     async def test_get_orderbook_returns_snapshot_for_symbol(self):
         client = self.make_client()
@@ -87,32 +87,29 @@ class TestAsyncMarketData(unittest.IsolatedAsyncioTestCase):
 
         result = await client.get_orderbook("SPY")
 
-        self.assertEqual(OrderBook.from_json(orderbook_payload), result)
-        self.assertEqual(
-            [
-                call(
-                    endpoint=API_INSTRUMENTS,
-                    params={PARAM_SYMBOLS: "SPY"},
-                ),
-                call(API_ORDERBOOK + "stock-id/"),
-            ],
-            client._async_http_client._get.call_args_list,
-        )
+        assert OrderBook.from_json(orderbook_payload) == result
+        assert [
+            call(
+                endpoint=API_INSTRUMENTS,
+                params={PARAM_SYMBOLS: "SPY"},
+            ),
+            call(API_ORDERBOOK + "stock-id/"),
+        ] == client._async_http_client._get.call_args_list
 
-    async def test_get_orderbook_returns_none_for_empty_snapshot(self):
+    async def test_get_orderbook_returns_none_for_empty_snapshot(self, caplog):
         client = self.make_client()
         client._async_http_client._get.side_effect = [
             [build_stock_info_payload(id="stock-id", symbol="SPY")],
             [],
         ]
 
-        with self.assertLogs(
-            "robinhood.core._market_data_impl",
-            level="WARNING",
+        with caplog.at_level(
+            "WARNING",
+            logger="robinhood.core._market_data_impl",
         ):
             result = await client.get_orderbook("SPY")
 
-        self.assertIsNone(result)
+        assert result is None
 
     async def test_get_future_info_filters_products_by_display_symbol(self):
         client = self.make_client()
@@ -128,24 +125,25 @@ class TestAsyncMarketData(unittest.IsolatedAsyncioTestCase):
 
         result = await client.get_future_info("/NQ")
 
-        self.assertEqual(FuturesProduct.from_json(nq_payload), result)
+        assert FuturesProduct.from_json(nq_payload) == result
         client._async_http_client._get.assert_awaited_once_with(
             API_FUTURES_PRODUCTS
         )
 
     async def test_get_all_futures_products_returns_none_for_empty_response(
         self,
+        caplog,
     ):
         client = self.make_client()
         client._async_http_client._get.return_value = []
 
-        with self.assertLogs(
-            "robinhood.core._market_data_impl",
-            level="WARNING",
+        with caplog.at_level(
+            "WARNING",
+            logger="robinhood.core._market_data_impl",
         ):
             result = await client.get_all_futures_products()
 
-        self.assertIsNone(result)
+        assert result is None
 
     async def test_get_active_contracts_for_id_sorts_by_expiration(self):
         client = self.make_client()
@@ -163,18 +161,11 @@ class TestAsyncMarketData(unittest.IsolatedAsyncioTestCase):
 
         result = await client.get_active_contracts_for_id("future-product-id")
 
-        self.assertEqual(
-            [
-                FuturesContract.from_json(earlier),
-                FuturesContract.from_json(later),
-            ],
-            result,
-        )
+        assert [
+            FuturesContract.from_json(earlier),
+            FuturesContract.from_json(later),
+        ] == result
         client._async_http_client._get.assert_awaited_once_with(
             endpoint=API_FUTURES_CONTRACTS,
             params={PARAM_PRODUCT_IDS: "future-product-id"},
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

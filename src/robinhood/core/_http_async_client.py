@@ -6,7 +6,7 @@ from typing import Any
 import aiohttp
 
 from robinhood.constants import BASE_API_LINK, RESULTS
-from robinhood.errors import (
+from robinhood.robinhood_errors import (
     AuthenticationError,
     EndpointNotFoundError,
     RateLimitError,
@@ -60,6 +60,7 @@ class RobinhoodAsyncHTTPClient:
 
     def update_session_token(self, token: str) -> None:
         if self.session:
+            logger.debug("Updating session auth token %s", token[:7])
             self.session.headers.update({"Authorization": f"Bearer {token}"})
         return None
 

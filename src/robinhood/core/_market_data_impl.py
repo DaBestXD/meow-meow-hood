@@ -38,7 +38,10 @@ from robinhood.dataclasses.api_dataclasses import (
     OrderBook,
     StockInfo,
 )
-from robinhood.errors import InvalidTypeError, NoFutureProductsReturnedError
+from robinhood.robinhood_errors import (
+    InvalidTypeError,
+    NoFutureProductsReturnedError,
+)
 from robinhood.utils._normalize_symbol import (
     check_if_uuid4,
     normalize_currency_input,
@@ -250,8 +253,7 @@ class MarketDataImpl(TypingBase):
     ) -> list[FuturesQuote] | FuturesQuote | None:
         """
         [Public]
-        Accepts either exact symbols such as /ESM26
-        or actual contract id
+        Accepts either exact symbols such as /ESM26 or actual contract id
         Using exact symbols has some overhead costs,
         suggested to use contract ids.
         Use exact symbol name ex: /ESM26, forward slash is optional
@@ -286,6 +288,7 @@ class MarketDataImpl(TypingBase):
     ) -> dict[str, str]:
         """
         [Private]
+        Resolve future symbols such as /ESM26 to active contract id
         """
         all_futures = await self._get_all_futures_products()
         mapping_symbols_to_ids: dict[str, str] = {}
@@ -347,6 +350,7 @@ class MarketDataImpl(TypingBase):
         """
         [Public]
         Return a CurrencyQuote dataclass for a symbol such as `BTC, DOGE, EUR`
+        Value is denoted in USD
         """
         symbol = normalize_currency_input(symbol)
         params = {PARAM_SYMBOLS: symbol}

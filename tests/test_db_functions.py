@@ -1,38 +1,29 @@
-import tempfile
-import unittest
 from datetime import datetime, timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
+
+import pytest
 
 from robinhood.dataclasses.api_dataclasses import OptionRequest
 from robinhood.db_logic.option_cache import OptionCache
 from tests.support import build_option_instrument
 
 
-class TestOptionCache(unittest.TestCase):
-    def make_cache(self) -> OptionCache:
-        self.temp_dir = tempfile.TemporaryDirectory()
-        db_path = Path(self.temp_dir.name) / "options.db"
-        self.addCleanup(self.temp_dir.cleanup)
-        cache = OptionCache(db_path, prune_expired=False)
-        self.addCleanup(cache.close)
-        return cache
+class TestOptionCache:
+    @pytest.fixture(autouse=True)
+    def _set_cache_factory(self, option_cache_factory) -> None:
+        self.make_cache = option_cache_factory
 
     def test_is_cachable_option_request_rejects_partial_filters(self):
-        self.assertTrue(
-            OptionCache._is_cachable_option_request(OptionRequest(symbol="SPY"))
+        assert OptionCache._is_cachable_option_request(
+            OptionRequest(symbol="SPY")
         )
-        self.assertFalse(
-            OptionCache._is_cachable_option_request(
-                OptionRequest(symbol="SPY", option_type="call")
-            )
+        assert not OptionCache._is_cachable_option_request(
+            OptionRequest(symbol="SPY", option_type="call")
         )
-        self.assertFalse(
-            OptionCache._is_cachable_option_request(
-                OptionRequest(symbol="SPY", strike_price=500.0)
-            )
+        assert not OptionCache._is_cachable_option_request(
+            OptionRequest(symbol="SPY", strike_price=500.0)
         )
 
     def test_map_option_request_to_ids_filters_by_request_fields(self):
@@ -70,30 +61,26 @@ class TestOptionCache(unittest.TestCase):
             ]
         )
 
-        self.assertCountEqual(
-            ["spy-call-100", "spy-put-100", "spy-call-200"],
+        assert sorted(
             cache.map_option_request_to_ids(OptionRequest(symbol="SPY"))[
                 OptionRequest(symbol="SPY")
-            ],
-        )
-        self.assertCountEqual(
-            ["spy-call-100", "spy-put-100"],
+            ]
+        ) == ["spy-call-100", "spy-call-200", "spy-put-100"]
+        assert sorted(
             cache.map_option_request_to_ids(
                 OptionRequest(symbol="SPY", exp_date="2026-04-17")
-            )[OptionRequest(symbol="SPY", exp_date="2026-04-17")],
-        )
-        self.assertCountEqual(
-            ["spy-call-100", "spy-call-200"],
+            )[OptionRequest(symbol="SPY", exp_date="2026-04-17")]
+        ) == ["spy-call-100", "spy-put-100"]
+        assert sorted(
             cache.map_option_request_to_ids(
                 OptionRequest(symbol="SPY", option_type="call")
-            )[OptionRequest(symbol="SPY", option_type="call")],
-        )
-        self.assertCountEqual(
-            ["spy-call-100", "spy-put-100"],
+            )[OptionRequest(symbol="SPY", option_type="call")]
+        ) == ["spy-call-100", "spy-call-200"]
+        assert sorted(
             cache.map_option_request_to_ids(
                 OptionRequest(symbol="SPY", strike_price=100.0)
-            )[OptionRequest(symbol="SPY", strike_price=100.0)],
-        )
+            )[OptionRequest(symbol="SPY", strike_price=100.0)]
+        ) == ["spy-call-100", "spy-put-100"]
 
     def test_fetch_expiration_dates_for_symbol_uses_synced_chain_cache(self):
         cache = self.make_cache()
@@ -113,7 +100,7 @@ class TestOptionCache(unittest.TestCase):
             cache.sync_option_chain("SPY")
             dates = cache.fetch_expiration_dates_for_symbol("SPY")
 
-        self.assertCountEqual(["2026-04-17", "2026-04-24"], dates)
+        assert sorted(dates) == ["2026-04-17", "2026-04-24"]
 
     def test_get_chain_id_returns_value_only_when_chain_is_synced(self):
         cache = self.make_cache()
@@ -125,7 +112,7 @@ class TestOptionCache(unittest.TestCase):
             )
         )
 
-        self.assertEqual("", cache.get_chain_id("SPY"))
+        assert "" == cache.get_chain_id("SPY")
 
         with (
             patch.object(
@@ -136,7 +123,7 @@ class TestOptionCache(unittest.TestCase):
             cache.sync_option_chain("SPY")
             chain_id = cache.get_chain_id("SPY")
 
-        self.assertEqual("chain-id", chain_id)
+        assert "chain-id" == chain_id
 
     def test_execute_query_with_args_supports_single_and_many_args(self):
         cache = self.make_cache()
@@ -164,7 +151,7 @@ class TestOptionCache(unittest.TestCase):
             {},
         )
 
-        self.assertEqual([("IWM",), ("QQQ",), ("SPY",)], rows)
+        assert [("IWM",), ("QQQ",), ("SPY",)] == rows
 
     def test_prune_expired_removes_only_rows_older_than_today(self):
         cache = self.make_cache()
@@ -214,35 +201,26 @@ class TestOptionCache(unittest.TestCase):
 
         cache.prune_expired()
 
-        self.assertEqual(
-            [("SPY", fresh)],
-            cache.execute_query_with_args(
-                """
+        assert [("SPY", fresh)] == cache.execute_query_with_args(
+            """
                 SELECT symbol, exp_date FROM expiration_dates
                 ORDER BY exp_date
                 """,
-                {},
-            ),
+            {},
         )
-        self.assertEqual(
-            [("fresh-id", fresh)],
-            cache.execute_query_with_args(
-                """
+        assert [("fresh-id", fresh)] == cache.execute_query_with_args(
+            """
                 SELECT option_id, exp_date FROM option_ids
                 ORDER BY option_id
                 """,
-                {},
-            ),
+            {},
         )
-        self.assertEqual(
-            [("SPY", fresh)],
-            cache.execute_query_with_args(
-                """
+        assert [("SPY", fresh)] == cache.execute_query_with_args(
+            """
                 SELECT symbol, exp_date FROM option_expiration_sync
                 ORDER BY exp_date
                 """,
-                {},
-            ),
+            {},
         )
 
     def test_is_option_request_synced_uses_future_ttl_for_cachable_request(
@@ -263,10 +241,10 @@ class TestOptionCache(unittest.TestCase):
             cache.sync_option_request_full(request, instruments)
 
         with patch.object(OptionCache, "now_edt_timestamp", return_value=1000):
-            self.assertTrue(cache.is_option_request_synced(request))
+            assert cache.is_option_request_synced(request)
 
         with patch.object(OptionCache, "now_edt_timestamp", return_value=3000):
-            self.assertFalse(cache.is_option_request_synced(request))
+            assert not cache.is_option_request_synced(request)
 
     def test_is_option_request_synced_scopes_expiration_cache_by_symbol(self):
         cache = self.make_cache()
@@ -287,10 +265,8 @@ class TestOptionCache(unittest.TestCase):
             cache.sync_option_request_full(request, instruments)
 
         with patch.object(OptionCache, "now_edt_timestamp", return_value=1000):
-            self.assertTrue(cache.is_option_request_synced(request))
-            self.assertFalse(
-                cache.is_option_request_synced(other_symbol_request)
-            )
+            assert cache.is_option_request_synced(request)
+            assert not cache.is_option_request_synced(other_symbol_request)
 
     def test_is_option_request_synced_uses_chain_sync_for_symbol_only_request(
         self,
@@ -303,13 +279,11 @@ class TestOptionCache(unittest.TestCase):
             cache.sync_option_chain("SPY")
 
         with patch.object(OptionCache, "now_edt_timestamp", return_value=1000):
-            self.assertTrue(
-                cache.is_option_request_synced(OptionRequest(symbol="SPY"))
-            )
+            assert cache.is_option_request_synced(OptionRequest(symbol="SPY"))
 
         with patch.object(OptionCache, "now_edt_timestamp", return_value=3000):
-            self.assertFalse(
-                cache.is_option_request_synced(OptionRequest(symbol="SPY"))
+            assert not cache.is_option_request_synced(
+                OptionRequest(symbol="SPY")
             )
 
     def test_fetch_strike_prices_returns_sorted_prices(self):
@@ -348,7 +322,7 @@ class TestOptionCache(unittest.TestCase):
             )
         )
 
-        self.assertEqual([490.0, 500.0, 510.0], result)
+        assert [490.0, 500.0, 510.0] == result
 
     def test_sync_option_request_dispatch_only_syncs_broad_requests(self):
         cache = self.make_cache()
@@ -370,7 +344,3 @@ class TestOptionCache(unittest.TestCase):
             broad_request,
             instruments,
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

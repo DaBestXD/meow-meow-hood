@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
+from robinhood import (
+    AccountIdNotFoundError,
+    InstrumentNotFoundError,
+    MalformedOrderError,
+)
 from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.constants import API_OPTION_ORDER, API_STOCK_ORDER, BASE_API_LINK
 from robinhood.dataclasses.api_dataclasses import (
@@ -12,11 +18,6 @@ from robinhood.dataclasses.api_dataclasses import (
     OptionRequest,
     StockInfo,
     StockOrderResponse,
-)
-from robinhood.errors import (
-    AccountIdNotFoundError,
-    InstruemtNotFoundError,
-    MalformedOrderError,
 )
 from tests.support import (
     build_async_robinhood_client,
@@ -44,19 +45,18 @@ def build_option_leg(
     )
 
 
-class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
-    async def asyncTearDown(self) -> None:
-        client = getattr(self, "client", None)
-        if client and not client.event_loop.is_closed():
-            client.event_loop.close()
+@pytest.mark.asyncio
+class TestTradingAsync:
+    @pytest.fixture(autouse=True)
+    def _set_client_tracker(self, async_client_tracker) -> None:
+        self.track_client = async_client_tracker
 
     def make_client(self) -> AsyncRobinhood:
         client = build_async_robinhood_client(
             http_client=SimpleNamespace(_post=AsyncMock())
         )
         client.user_id = "ACC123"
-        self.client = client
-        return client
+        return self.track_client(client)
 
     def set_market_lookup_success(self, client: AsyncRobinhood) -> None:
         client._get_stock_info = AsyncMock(
@@ -71,7 +71,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
     async def test_market_stock_order_rejects_invalid_side(self) -> None:
         client = self.make_client()
 
-        with self.assertRaises(MalformedOrderError):
+        with pytest.raises(MalformedOrderError):
             await client._place_market_stock_order(
                 "SPY",
                 "hold",
@@ -81,10 +81,10 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
     async def test_market_stock_order_requires_exactly_one_amount(self) -> None:
         client = self.make_client()
 
-        with self.assertRaises(MalformedOrderError):
+        with pytest.raises(MalformedOrderError):
             await client._place_market_stock_order("SPY", "buy")
 
-        with self.assertRaises(MalformedOrderError):
+        with pytest.raises(MalformedOrderError):
             await client._place_market_stock_order(
                 "SPY",
                 "buy",
@@ -96,7 +96,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
         client = self.make_client()
         client.user_id = 403
 
-        with self.assertRaises(AccountIdNotFoundError):
+        with pytest.raises(AccountIdNotFoundError):
             await client._place_market_stock_order(
                 "SPY",
                 "buy",
@@ -110,7 +110,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
         client._get_stock_info = AsyncMock(return_value=None)
         client._get_stock_quotes = AsyncMock()
 
-        with self.assertRaises(InstruemtNotFoundError):
+        with pytest.raises(InstrumentNotFoundError):
             await client._place_market_stock_order(
                 "SPY",
                 "buy",
@@ -122,7 +122,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
         )
         client._get_stock_quotes = AsyncMock(return_value=None)
 
-        with self.assertRaisesRegex(ValueError, "unable to retrieve quote"):
+        with pytest.raises(ValueError, match="unable to retrieve quote"):
             await client._place_market_stock_order(
                 "SPY",
                 "buy",
@@ -141,18 +141,17 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
             dollar_based_amount=25.0,
         )
 
-        self.assertEqual(StockOrderResponse.from_json(response_payload), result)
+        assert StockOrderResponse.from_json(response_payload) == result
         client._async_http_client._post.assert_awaited_once()
         post_kwargs = client._async_http_client._post.await_args.kwargs
-        self.assertEqual(API_STOCK_ORDER, post_kwargs["endpoint"])
-        self.assertEqual("SPY", post_kwargs["json"]["symbol"])
-        self.assertEqual(
-            {"amount": "25.00", "currency_code": "USD"},
-            post_kwargs["json"]["dollar_based_amount"],
-        )
-        self.assertEqual(
-            BASE_API_LINK + "/accounts/ACC123/",
-            post_kwargs["json"]["account"],
+        assert API_STOCK_ORDER == post_kwargs["endpoint"]
+        assert "SPY" == post_kwargs["json"]["symbol"]
+        assert {"amount": "25.00", "currency_code": "USD"} == post_kwargs[
+            "json"
+        ]["dollar_based_amount"]
+        assert (
+            BASE_API_LINK + "/accounts/ACC123/"
+            == post_kwargs["json"]["account"]
         )
 
     async def test_market_stock_order_posts_quantity_payload(self) -> None:
@@ -167,11 +166,11 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
             quantity=2.0,
         )
 
-        self.assertEqual(StockOrderResponse.from_json(response_payload), result)
+        assert StockOrderResponse.from_json(response_payload) == result
         post_payload = client._async_http_client._post.await_args.kwargs["json"]
-        self.assertEqual("2.0", post_payload["quantity"])
-        self.assertEqual("close", post_payload["position_effect"])
-        self.assertNotIn("dollar_based_amount", post_payload)
+        assert "2.0" == post_payload["quantity"]
+        assert "close" == post_payload["position_effect"]
+        assert "dollar_based_amount" not in post_payload
 
     async def test_option_order_rejects_mixed_symbols(self) -> None:
         client = self.make_client()
@@ -181,7 +180,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
             build_option_leg(symbol="QQQ"),
         ]
 
-        with self.assertRaises(MalformedOrderError):
+        with pytest.raises(MalformedOrderError):
             await client._place_option_order(
                 option_legs,
                 "debit",
@@ -197,7 +196,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
         client = self.make_client()
         client._get_option_chain_data = AsyncMock(return_value=None)
 
-        with self.assertRaises(InstruemtNotFoundError):
+        with pytest.raises(InstrumentNotFoundError):
             await client._place_option_order(
                 [build_option_leg()],
                 "debit",
@@ -210,7 +209,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
         )
         client._get_oi_helper = AsyncMock(return_value=[])
 
-        with self.assertRaisesRegex(ValueError, "Option legs should match"):
+        with pytest.raises(ValueError, match="Option legs should match"):
             await client._place_option_order(
                 [build_option_leg()],
                 "debit",
@@ -228,10 +227,13 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
             return_value=[build_option_instrument(id="option-id")]
         )
 
-        with self.assertRaises(MalformedOrderError):
+        with pytest.raises(MalformedOrderError):
             await client._place_option_order([leg], "debit", 1, 1.25)
 
-    async def test_option_order_returns_none_when_post_fails(self) -> None:
+    async def test_option_order_returns_none_when_post_fails(
+        self,
+        caplog,
+    ) -> None:
         client = self.make_client()
         client._get_option_chain_data = AsyncMock(
             return_value=SimpleNamespace(id="chain-id")
@@ -241,9 +243,9 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
         )
         client._async_http_client._post.return_value = None
 
-        with self.assertLogs(
-            "robinhood.core._trading_impl",
-            level="WARNING",
+        with caplog.at_level(
+            "WARNING",
+            logger="robinhood.core._trading_impl",
         ):
             result = await client._place_option_order(
                 [build_option_leg()],
@@ -252,7 +254,7 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
                 1.25,
             )
 
-        self.assertIsNone(result)
+        assert result is None
 
     async def test_option_order_posts_single_leg_payload(self) -> None:
         client = self.make_client()
@@ -271,28 +273,18 @@ class TestTradingAsync(unittest.IsolatedAsyncioTestCase):
             1.25,
         )
 
-        self.assertEqual(
-            OptionOrderResponse.from_json(response_payload),
-            result,
-        )
+        assert OptionOrderResponse.from_json(response_payload) == result
         client._async_http_client._post.assert_awaited_once()
         post_kwargs = client._async_http_client._post.await_args.kwargs
-        self.assertEqual(API_OPTION_ORDER, post_kwargs["endpoint"])
-        self.assertEqual("debit", post_kwargs["json"]["direction"])
-        self.assertEqual(1.25, post_kwargs["json"]["price"])
-        self.assertEqual(1, post_kwargs["json"]["quantity"])
-        self.assertEqual(
-            [
-                {
-                    "option": option_instrument.url,
-                    "position_effect": "open",
-                    "ratio_quantity": 1,
-                    "side": "buy",
-                }
-            ],
-            post_kwargs["json"]["legs"],
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert API_OPTION_ORDER == post_kwargs["endpoint"]
+        assert "debit" == post_kwargs["json"]["direction"]
+        assert 1.25 == post_kwargs["json"]["price"]
+        assert 1 == post_kwargs["json"]["quantity"]
+        assert [
+            {
+                "option": option_instrument.url,
+                "position_effect": "open",
+                "ratio_quantity": 1,
+                "side": "buy",
+            }
+        ] == post_kwargs["json"]["legs"]

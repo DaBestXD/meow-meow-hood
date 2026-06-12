@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
+from robinhood.async_robinhood_class import ASYNC_PATH
+from robinhood.sync_robinhood_class import SYNC_PATH
 from scripts.blah_typing import AstFunctionType
 from scripts.implementation_checker import get_args, implementation_checker_func
 
@@ -56,6 +58,9 @@ def create_function(
     func_node: AstFunctionType,
     func_type: Literal["async_robinhood_class", "sync_robinhood_class"],
 ) -> AstFunctionType:
+    # The only functions that are being passed into function have already
+    # been checked for a docstring, so we can safely assume that the first
+    # stmt of the body will be a constant expr with a string value
     func_node.body[0].value.value = func_node.body[0].value.value.replace(  # pyright: ignore
         f"\n{func_node.body[0].col_offset * ' '}[Public]", ""
     )
@@ -87,8 +92,8 @@ def create_function(
                 func_node, call_args, call_keywords, func_type
             )
         )
-        func_node.name = func_node.name.lstrip("_")
-        return func_node
+        func_node.name = func_node.name.removeprefix("_")
+        return ast.FunctionDef(**func_node.__dict__)
 
 
 def _get_class_def(file_path: Path) -> ast.ClassDef:
@@ -105,14 +110,9 @@ def main() -> None:
     """
 
     cmd_args = get_args()
-    public_classes = [
-        Path(
-            "/Users/trentlee/PythonProjects/meow-meow-hood/src/robinhood/async_robinhood_class.py"
-        ).resolve(),
-        Path(
-            "/Users/trentlee/PythonProjects/meow-meow-hood/src/robinhood/sync_robinhood_class.py"
-        ).resolve(),
-    ]
+    public_classes = [ASYNC_PATH, SYNC_PATH]
+    # Need to change this to dict mapping of file path and missing files,
+    # This will break if impl is only in one public class and not both
     missing_funcs = set(
         implementation_checker_func(cmd_args.files, cmd_args.target_files)
     )
@@ -140,14 +140,7 @@ def main() -> None:
             for f in missing_funcs:
                 for o in f.overload_impl:
                     o.name = o.name.removeprefix("_")
-                    sync_ver = ast.FunctionDef(
-                        name=o.name,
-                        args=o.args,
-                        body=o.body,
-                        decorator_list=o.decorator_list,
-                        returns=o.returns,
-                        type_comment=o.type_comment,
-                    )
+                    sync_ver = ast.FunctionDef(**o.__dict__)
                     ast.fix_missing_locations(sync_ver)
                     class_mod.body.append(sync_ver)
                 class_mod.body.append(

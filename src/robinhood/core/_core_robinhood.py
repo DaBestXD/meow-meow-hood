@@ -25,17 +25,13 @@ import os
 from pathlib import Path
 from typing import Any, Coroutine
 
-from dotenv import load_dotenv
-
 from robinhood.browser_functions.browser_token_parser import (
     Browser,
-    auto_open_browser,
-    get_acc_id,
-    get_token,
+    Chrome,
 )
 from robinhood.browser_functions.token_functions import (
     _refresh_access_token,
-    check_if_modified_date_within_range,
+    _return_access_token_expiry,
 )
 from robinhood.core._account_impl import AccountImpl
 from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
@@ -43,11 +39,13 @@ from robinhood.core._market_data_impl import MarketDataImpl
 from robinhood.core._option_impl import OptionsImpl
 from robinhood.core._trading_impl import TradingImpl
 from robinhood.db_logic.option_cache import OptionCache
+from robinhood.robinhood_errors import TokenExtractionError
 from robinhood.utils.configure_logger import MISSING, configure_logger
 from robinhood.utils.set_up_script import set_up
 from robinhood.utils.types import T
 
 logger = logging.getLogger(__name__)
+_MISSING = object
 
 
 class _CoreRobinhood(
@@ -60,97 +58,104 @@ class _CoreRobinhood(
         self,
         *,
         config_path: str | os.PathLike[str] = Path.cwd(),
-        extract_token: bool = True,
-        write_env: bool = True,
-        open_browser: bool = True,
         user_agent: str | None = None,
         enable_cache: bool = True,
         prune_expired_options: bool = True,
         logging_level: int | None = logging.INFO,
-        log_handler: logging.Handler | None | object = MISSING,
-        access_token: str | None = None,
+        log_handler: logging.Handler | None | _MISSING = MISSING,
+        browser_type: type[Browser] = Chrome,
     ) -> None:
         """
         Initialize shared auth, cache, logging, and HTTP-client state.
 
         This base class powers both `Robinhood` and `AsyncRobinhood`. Public
         users normally instantiate one of those concrete clients.
+        Attempts to load token from env and checks if it's still valid
+
+        Raises TokenExtractionError if token is unable to be found. If this
+        occurs try logging into robinhood on the browser then closing.
         """
-        self.event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         configure_logger(logging_level, log_handler)
-        self.user_id = -1
-        if access_token and not extract_token and not enable_cache:
-            token = access_token
-            self._db_cache = None
-            self.env_path = None
-        else:
+        self.browser_type = browser_type()
+        token = self.browser_type.get_token()
+        if not token:
+            raise TokenExtractionError("Bearer token cannot be none.")
+        self.user_id = self.browser_type.acc_id
+        if enable_cache:
             config_dir = set_up(Path(config_path))
-            self.env_path = config_dir / ".env"
             cache_path = config_dir / "meow-meow-hood.db"
-            if enable_cache:
-                self._db_cache = OptionCache(cache_path, prune_expired_options)
-            else:
-                self._db_cache = None
-            load_dotenv(dotenv_path=self.env_path)
-            token = access_token if access_token else os.getenv("BEARER_TOKEN")
-            if token:
-                self.user_id = get_acc_id(token)
-            if extract_token and isinstance(self.user_id, int):
-                token, self.user_id = get_token(
-                    env_path=self.env_path,
-                    open_browser=open_browser,
-                    write_env=write_env,
-                )
-            if not token:
-                raise RuntimeError("Bearer token cannot be none.")
+            self._db_cache = OptionCache(cache_path, prune_expired_options)
+        else:
+            logger.info("Cache is disabled skipping config setup")
+            self._db_cache = None
+        # set up http client
         self._async_http_client = RobinhoodAsyncHTTPClient(token, user_agent)
+        # begin event loop for both async/sync versions
+        self.event_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         logger.info("Robinhood Client Initialized")
 
     def _run(self, coro: Coroutine[Any, Any, T]) -> T:
         return self.event_loop.run_until_complete(coro)
 
-    def open_browser(
-        self,
-        browser: Browser,
-        wait_time: int = 10,
-        days: int = 1,
-    ) -> None:
-        """
-        Checks if the last modified date is greater than one day,
-        then open the browser pointed at robinhood, closes after
-        N seconds(default is 10 seconds)
-        You will need to run this function in order to keep the browser
-        logged in.
-        """
-        if check_if_modified_date_within_range(days=days):
-            auto_open_browser(browser, wait_time=wait_time)
-        return None
-
     def refresh_access_token(
         self,
-        browser: Browser | None,
+        browser: type[Browser] | None = None,
+        *,
+        time_until_close: int = 10,
         auto_open_browser: bool = True,
+        headless: bool = True,
     ) -> None:
         """
-        Wrapper function that:
-        -Opens browser if last access timed
-        -
-        Function that will automatically open browser if token is expired,
-        and attempts to retrieve a new token, this function will automatically
-        open the browser if the last access time is greater than 1 day, this
-        is required to keep the session logged in on the browser.
+        (Warning) If browser is open this function will break
+
+        For param 'browser' allows for manually override if you wish
+        to change which browser the class uses.
+        If no browser is provided will use the browser that was
+        used on initilization(default is chrome).
+
+        Opens browser if last access timed is older than 1 day,
+        if the lass access time is older than 7 days raises hard error,
+        and you will need to manually log back in.
+
+        If token is expired will open the browser to retrieve new token
+
         """
-        if browser and auto_open_browser:
-            self.open_browser(browser)
+        self.browser_type = self.browser_type if not browser else browser()
+        if (
+            auto_open_browser
+            and self.browser_type.last_accessed_greater_than_n_days()
+        ):
+            self.browser_type.open_and_close_browser(
+                time_until_close=time_until_close,
+                headless=headless,
+            )
         access_token = self._async_http_client.access_token
-        env_path = self.env_path if self.env_path else ""
-        token = _refresh_access_token(
-            access_token,
-            env_path,
-            True if self.env_path else False,
-        )
+        token = _refresh_access_token(access_token, self.browser_type)
         if isinstance(token, str):
             self._async_http_client.update_session_token(token)
+            self._async_http_client.access_token = token
+            self._async_http_client.session = None
+        return None
+
+    def get_access_token_expiry(self) -> int:
+        """
+        Return the expiration from the currently loaded access_token
+        as an int timestamp
+        """
+        return _return_access_token_expiry(self._async_http_client.access_token)
+
+    def prune_db(self) -> None:
+        """
+        Removes all expired information relating to options,
+        from the following tables:
+        - expiration_dates
+        - option_Ids
+        - option_expiration_sync
+        """
+        if not self._db_cache:
+            logger.warning("No db cache, nothing to prune")
+            return None
+        self._db_cache.prune_expired()
         return None
 
     def execute_custom_sql(

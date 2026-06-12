@@ -31,10 +31,10 @@ class FailedToDeleteWatchlistError(RobinhoodError):
 
 
 class FailedToModifyWatchlistError(RobinhoodError):
-    """When a watchlist failes to be added/deleted"""
+    """When a watchlist fails to be added/deleted"""
 
 
-class InstruemtNotFoundError(RobinhoodError):
+class InstrumentNotFoundError(RobinhoodError):
     """Raised when a requested instrument cannot be found."""
 
 

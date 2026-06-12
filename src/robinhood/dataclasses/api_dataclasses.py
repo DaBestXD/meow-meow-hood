@@ -55,10 +55,10 @@ class ApiPayloadMixin:
 class OptionRequest:
     """
     Filter object used when requesting option data or building option orders.
+    Cache friendly requests have at most `symbol` and `exp_date`, anything more
+    and the request will not be cached.
 
-    `symbol` is required. `exp_date`, `option_type`, and `strike_price` narrow
-    market-data requests. `position_effect` and `side` are used for option
-    orders.
+    `position_effect` and `side` are used for option orders.
     """
 
     symbol: str
@@ -641,3 +641,32 @@ class CurrencyQuote(ApiPayloadMixin):
     volume: float
     updated_at: str
     routing_group: str
+
+
+@dataclass
+class AccountValue(ApiPayloadMixin):
+    deposit_adjusted_market_value: float
+    equity_market_value: float
+    forex_market_value: float
+    futures_market_value: float
+    futures_cash: float
+    event_contracts_market_value: float
+    event_contracts_cash: float
+    option_market_value: float
+    cash: float
+    brokerage_cash: float
+    pending_deposits: float
+    early_access_amount: float
+    last_core_portfolio_equity: float
+    excess_maintenance_with_uncleared_deposits: float
+    margin_used: float
+    account_number: float
+    currency: str
+    event_contracts_market_value_excluding_swaps_cash: float
+    event_contracts_mv_predict_account: float
+
+    def __post_init__(self) -> None:
+        for k, v in self.__dict__.items():
+            if type(v) is float:
+                setattr(self, k, round(v, 2))
+        self.account_number = int(self.account_number)

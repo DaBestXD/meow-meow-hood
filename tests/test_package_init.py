@@ -1,19 +1,25 @@
 import importlib
 import importlib.metadata as metadata
-import unittest
 from unittest.mock import patch
 
 import robinhood
 
 
-class TestPackageInit(unittest.TestCase):
+class TestPackageInit:
     def test_package_exports_public_client_types(self):
         expected_exports = {
+            "AccountIdNotFoundError",
             "AchTransfer",
+            "AuthenticationError",
             "AsyncRobinhood",
             "BidAsk",
+            "ConfigurationError",
             "CurrencyPair",
             "CurrencyQuote",
+            "EndpointNotFoundError",
+            "FailedToCreateWatchlistError",
+            "FailedToDeleteWatchlistError",
+            "FailedToModifyWatchlistError",
             "InstrumentQuote",
             "Future",
             "FuturesContract",
@@ -23,6 +29,10 @@ class TestPackageInit(unittest.TestCase):
             "IndexInfo",
             "IndexQuote",
             "Instrument",
+            "InstrumentNotFoundError",
+            "InvalidTypeError",
+            "MalformedOrderError",
+            "NoFutureProductsReturnedError",
             "OptionChain",
             "OptionGreekData",
             "OptionInstrument",
@@ -31,25 +41,29 @@ class TestPackageInit(unittest.TestCase):
             "OptionPosition",
             "OptionRequest",
             "OptionStrategy",
+            "OrderFailedError",
             "OrderBook",
+            "RateLimitError",
             "Robinhood",
             "RobinhoodAccount",
+            "RobinhoodError",
             "StockInfo",
             "StockOrder",
             "StockOrderResponse",
             "StockPosition",
+            "TokenExtractionError",
             "WatchList",
             "__version__",
         }
 
-        self.assertTrue(expected_exports.issubset(set(robinhood.__all__)))
+        assert expected_exports.issubset(set(robinhood.__all__))
         for export_name in expected_exports:
-            self.assertTrue(hasattr(robinhood, export_name), export_name)
+            assert hasattr(robinhood, export_name), export_name
 
     def test_package_version_comes_from_distribution_metadata(self):
         with patch("importlib.metadata.version", return_value="9.9.9"):
             importlib.reload(robinhood)
-            self.assertEqual("9.9.9", robinhood.__version__)
+            assert "9.9.9" == robinhood.__version__
 
         importlib.reload(robinhood)
 
@@ -59,10 +73,6 @@ class TestPackageInit(unittest.TestCase):
             side_effect=metadata.PackageNotFoundError,
         ):
             importlib.reload(robinhood)
-            self.assertEqual("0.0.0", robinhood.__version__)
+            assert "0.0.0" == robinhood.__version__
 
         importlib.reload(robinhood)
-
-
-if __name__ == "__main__":
-    unittest.main()

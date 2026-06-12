@@ -2,12 +2,15 @@
 
 # Meow-Meow-Hood API
 
+> [!WARNING]
+> API is very unstable and will be prone to breaking changes
+
 A Python wrapper around Robinhood's private API with a focus on option market
 data, local option metadata caching, and simple sync or async clients.
 
 ## Installation
 
-Requires Python 3.11 or newer.
+Requires Python 3.11+
 
 ```bash
 uv add meow-meow-hood
@@ -18,42 +21,46 @@ pip install meow-meow-hood
 Import from the `robinhood` package:
 
 ```python
-from robinhood import OptionRequest, Robinhood
+from robinhood import AsyncRobinhood, Firefox, OptionRequest, Robinhood
 ```
 
 ## Authentication And Config
 
-By default, `Robinhood()` tries to find a locally stored Robinhood browser token.
-You must already be logged in to Robinhood in a local Chrome or Firefox profile.
+By default, `Robinhood()` reads a locally stored Robinhood browser token from
+your default Chrome profile. You must already be logged in to Robinhood in the
+selected local browser profile.
 
 The client creates a config directory named `.meow-meow-config` under
-`config_path`, which defaults to the current working directory. Generated files
-are stored there:
+`config_path`, which defaults to the current working directory. When
+`enable_cache=True`, the local SQLite option metadata cache is stored there as
+`meow-meow-hood.db`.
 
-- `.env` stores `BEARER_TOKEN` and `ACCOUNT_NUMBER` when token extraction writes
-  credentials.
-- `meow-meow-hood.db` stores the local SQLite option metadata cache when
-  `enable_cache=True`.
-
-Useful setup options:
+Authentication setup options:
 
 ```python
 from pathlib import Path
 
-from robinhood import Robinhood
+from robinhood import Firefox, Robinhood
 
-# Use a token directly instead of extracting one from a browser profile.
-with Robinhood(extract_token=False, access_token="...") as rh:
+# Use Firefox instead of the default Chrome profile.
+with Robinhood(browser_type=Firefox) as rh:
     quote = rh.get_stock_quotes("SPY")
 
-# Store config files outside the current working directory.
+# Store cache files outside the current working directory.
 with Robinhood(config_path=Path.home() / ".config") as rh:
     quote = rh.get_stock_quotes("SPY")
 ```
 
-If a saved token is rejected and `open_browser=True`, the refresh flow may open
-Chrome and Firefox briefly to refresh local auth state. This can close existing
-browser windows, so set `open_browser=False` when that behavior is not desired.
+`refresh_access_token()` can briefly open the selected browser when local auth
+state is stale. Use `auto_open_browser=False` when that behavior is not desired.
+
+```python
+from robinhood import Robinhood
+
+with Robinhood() as rh:
+    rh.refresh_access_token(auto_open_browser=False)
+    print(rh.get_access_token_expiry())
+```
 
 ## Quickstart
 
@@ -120,7 +127,7 @@ HTTP behavior to expect:
 - Other unexpected statuses are logged by the HTTP layer.
 
 Trading helpers can raise package errors such as `MalformedOrderError`,
-`InstruemtNotFoundError`, or `AccountIdNotFoundError` when an order cannot be
+`InstrumentNotFoundError`, or `AccountIdNotFoundError` when an order cannot be
 validated locally before submission.
 
 ## More Examples
@@ -144,4 +151,4 @@ the public clients, dataclasses, return types, and setup parameters.
 
 ## TODO Log
 
-See [docs/todo.md](./docs/todo.md) for planned features.
+See [docs/TODO.md](./docs/TODO.md) for planned features.

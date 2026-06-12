@@ -72,10 +72,13 @@ class OptionsImpl(TypingBase):
 
     async def _get_strike_prices(
         self, *, symbol: str, exp_date: str
-    ) -> dict[OptionRequest, list[float]]:
+    ) -> list[float] | tuple[list[float], list[float]] | None:
         """
         [Public]
-        Returns a dict of OptionRequest and a list of strike prices
+        Returns either a list of floats, or if for some reason theres a
+        difference in put/call size it will return two lists with the first
+        list being calls, and second being puts
+        Returns `None` if unable to find strikes for symbol at given date
         """
         symbol = uppercase_input(symbol)
         base_request = OptionRequest(symbol=symbol, exp_date=exp_date)
@@ -93,10 +96,11 @@ class OptionsImpl(TypingBase):
                 self._get_strike_prices.__name__,
                 symbol,
             )
-            return {
-                call_request: self._db_cache.fetch_strike_prices(call_request),
-                put_request: self._db_cache.fetch_strike_prices(put_request),
-            }
+            calls = self._db_cache.fetch_strike_prices(call_request)
+            puts = self._db_cache.fetch_strike_prices(put_request)
+            if len(calls) != len(puts):
+                return calls, puts
+            return calls
         chain = self._db_cache.get_chain_id(symbol) if self._db_cache else None
         if not chain:
             chain = await self._get_option_chain_data(symbol)
@@ -108,7 +112,7 @@ class OptionsImpl(TypingBase):
                 symbol,
                 exp_date,
             )
-            return {call_request: [], put_request: []}
+            return None
         params = {
             PARAM_CHAIN_ID: chain,
             PARAM_EXPIRATION_DATE: exp_date,
@@ -149,7 +153,11 @@ class OptionsImpl(TypingBase):
             symbol,
             len(put_strikes),
         )
-        return {call_request: call_strikes, put_request: put_strikes}
+        if len(call_strikes) != len(put_strikes):
+            if call_strikes and put_strikes:
+                return call_strikes, put_strikes
+            return None
+        return call_strikes if call_strikes else None
 
     async def _resolve_option_greeks_from_ids(
         self,
@@ -180,6 +188,7 @@ class OptionsImpl(TypingBase):
             for chain in c:
                 op_greek_list.append(chain)
         greeks_by_id = {o.instrument_id: o for o in op_greek_list}
+        # nested list comprehension is evil
         return {
             request: [
                 greeks_by_id[option_id]
@@ -195,9 +204,25 @@ class OptionsImpl(TypingBase):
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         """
         [Public]
+
+        WARNING:
+        Use `get_option_greeks_batch_request` to avoid rate limits
+
         This doesn't check the db_cache for any hits
         and routes through the normal api path of:
         Option Chain Data --> Option Instrument Data --> Option Greek Data
+
+        Return option greek data mapped to the option request it came from
+        Example(Note OptionRequest obj are kw_only):
+        ```
+        op_req = OptionRequest("SPY", "yyyy-mm-dd")`
+        second_req = OptionRequest("QQQ", "yyyy-mm-dd")
+        returns:
+        {
+            op_req : list[OptionGreekData, ...],
+            second_req : list[OptionGreekData, ...],
+        }
+        ```
         """
         if len(option_requests) == 1:
             chains = await self._get_option_chain_data(
@@ -317,13 +342,58 @@ class OptionsImpl(TypingBase):
                 self._db_cache.sync_option_chain(c.symbol)
         return return_val if len(return_val) > 1 else return_val[0]
 
+    @overload
+    async def _get_option_meta_data(
+        self, ids: list[str]
+    ) -> list[OptionInstrument] | None: ...
+    @overload
+    async def _get_option_meta_data(
+        self, ids: str
+    ) -> OptionInstrument | None: ...
+
+    async def _get_option_meta_data(
+        self, ids: str | list[str]
+    ) -> list[OptionInstrument] | OptionInstrument | None:
+        """
+        [Public]
+        Endpoint for taking option ids and getting more meta data back
+        This is needed as market data for option id does not return strike_price
+        This does not provide information about greek data
+        """
+        if isinstance(ids, list):
+            params = {PARAM_ID: ",".join(ids)}
+            res_json = await self._async_http_client._get(
+                API_OPTIONS_INSTRUMENTS,
+                params=params,
+            )
+            if not res_json:
+                logger.warning(f"No results for {ids}")
+                return None
+            option_instruments = [
+                OptionInstrument.from_json(o) for o in res_json if o
+            ]
+
+            return option_instruments
+        elif isinstance(ids, str):
+            res_json = await self._async_http_client._get(
+                API_OPTIONS_INSTRUMENTS,
+                params={PARAM_ID: ids},
+            )
+            if not res_json:
+                logger.warning(f"No results for {ids}")
+                return None
+            return OptionInstrument.from_json(res_json[0])
+        raise ValueError(
+            f"IDs must be of type str or list[str], not {type(ids)}"
+        )
+
     async def _get_option_greek_data(
         self, option_ids: list[str]
     ) -> list[OptionGreekData]:
         """
-        Maybe implement this?
         [Public]
-        Takes the list of options ids and returns
+        Must be the option UUID.
+        Takes the list of options ids and returns option greek data,
         """
         joined_option_ids = ",".join(option_ids)
         if not joined_option_ids:
@@ -348,7 +418,17 @@ class OptionsImpl(TypingBase):
     ) -> dict[OptionRequest, list[OptionGreekData]]:
         """
         [Public]
-        Return option greek data grouped by the input request objects.
+        Return option greek data mapped to the option request it came from
+        Example(Note OptionRequest obj are kw_only):
+        ```
+        op_req = OptionRequest("SPY", "yyyy-mm-dd")`
+        second_req = OptionRequest("QQQ", "yyyy-mm-dd")
+        returns:
+        {
+            op_req : list[OptionGreekData, ...],
+            second_req : list[OptionGreekData, ...],
+        }
+        ```
         """
         if isinstance(option_requests, OptionRequest):
             option_requests = [option_requests]
