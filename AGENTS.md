@@ -24,7 +24,7 @@ uv run /scripts/dataclass_construstor.py \
 ## For general code reviews
 
 - Run `uv run -m scripts.implementation_checker`
-- Run `uv run scripts/fixy.py`
+- Run `uv run -m scripts/fixy`
 
 ## For review before publishing
 

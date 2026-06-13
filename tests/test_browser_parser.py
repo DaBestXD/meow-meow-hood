@@ -126,14 +126,12 @@ class TestBrowserTokenParser:
         profile_path = write_firefox_auth_state(tmp_path, valid_token)
         mock_get_acc_id.return_value = "ACC123"
 
-        parsed_profile_path, parsed_token, parsed_acc_id = (
-            _get_firefox_profile_token_and_id(tmp_path)
+        parsed_profile_path, parsed_token = _get_firefox_profile_token_and_id(
+            tmp_path
         )
 
         assert profile_path == parsed_profile_path
         assert valid_token == parsed_token
-        assert "ACC123" == parsed_acc_id
-        mock_get_acc_id.assert_called_once_with(valid_token)
 
     def test_firefox_profile_path_raises_for_stale_token(
         self, tmp_path: Path
@@ -141,7 +139,9 @@ class TestBrowserTokenParser:
         expired_token = build_test_jwt(exp=int(time.time()) - 60)
         write_firefox_auth_state(tmp_path, expired_token)
 
-        with pytest.raises(TokenExtractionError, match="stale token"):
+        with pytest.raises(
+            TokenExtractionError, match="Expired token was retrieved"
+        ):
             _get_firefox_profile_token_and_id(tmp_path)
 
     @patch("robinhood.browser_functions.browser_token_parser.get_acc_id")

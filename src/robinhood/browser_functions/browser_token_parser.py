@@ -53,6 +53,8 @@ DB_PATH = Path("storage/default/https+++robinhood.com/ls/data.sqlite")
 class Browser(Protocol):
     """Executable names for a supported browser on each platform."""
 
+    def __init__(self, open_browser_on_stale_token: bool = False) -> None: ...
+
     windows_db_path: Path
     linux_db_path: Path
     mac_db_path: Path
@@ -75,22 +77,52 @@ class Browser(Protocol):
 
 class Firefox:
     """
-    Firefox executable names for supported platforms.
+    Set `open_and_close_browser = True` if you want class creation
+    to attempt to refresh an invalid token
+
+    (Warning) This will attempt to open the browser headless ensure
+    firefox is closed or this will raise an error
+
     Includes the file path to the Firefox IndexedDB/local storage and the
     path to the Firefox executable.
     Also has functions to open and close browser to keep session alive.
     """
 
-    def __init__(self, raise_err_on_stale_token: bool = True) -> None:
+    def __init__(
+        self,
+        open_browser_on_stale_token: bool = False,
+    ) -> None:
         self.windows_db_path: Path = FIRE_WINDOWS
         self.linux_db_path: Path = FIRE_LINUX
         self.mac_db_path: Path = FIRE_MAC
+        self._configure_platform_profile()
+        self._placeholder_name(open_browser_on_stale_token)
 
+    def _placeholder_name(self, open_browser_on_stale_token: bool) -> None:
+        # first check if extracted token is valid
+        try:
+            self.acc_id = get_acc_id(self._extracted_token)
+            return None
+        except AuthenticationError:
+            # this whole structure is so messy and terrible
+            # oh well TODO: fix later
+            if not open_browser_on_stale_token:
+                raise
+        # open and close browser to attempt to refresh token
+        self.open_and_close_browser()
+        # second check to see if new token is valid
+        self.acc_id = get_acc_id(self._extracted_token)
+
+    def _configure_platform_profile(self) -> None:
+        """
+        Sets:
+        - firefox_profile_path
+        - _extracted_token
+        """
         if sys.platform == "win32":
-            self.firefox_profile_path, self._extracted_token, self.acc_id = (
+            self.firefox_profile_path, self._extracted_token = (
                 _get_firefox_profile_token_and_id(
                     self.windows_db_path,
-                    raise_err_on_stale_token,
                 )
             )
             self.application_path = Path(
@@ -98,10 +130,9 @@ class Firefox:
             )
 
         elif sys.platform == "darwin":
-            self.firefox_profile_path, self._extracted_token, self.acc_id = (
+            self.firefox_profile_path, self._extracted_token = (
                 _get_firefox_profile_token_and_id(
                     self.mac_db_path,
-                    raise_err_on_stale_token,
                 )
             )
             self.application_path = Path(
@@ -109,10 +140,9 @@ class Firefox:
             )
 
         elif sys.platform == "linux":
-            self.firefox_profile_path, self._extracted_token, self.acc_id = (
+            self.firefox_profile_path, self._extracted_token = (
                 _get_firefox_profile_token_and_id(
                     self.linux_db_path,
-                    raise_err_on_stale_token,
                 )
             )
             self.application_path = Path("/usr/bin/firefox")
@@ -133,6 +163,7 @@ class Firefox:
         """
         Parse the firefox local storage file for the web:atuh_sate blob
         then decode with snappy.
+        Then verifies that the token is valid with `get_acc_id`
         """
         db_file_path = "file:" + str(self.db_path) + "?immutable=1"
         con = sqlite3.connect(db_file_path, uri=True)
@@ -235,8 +266,12 @@ class Firefox:
                     args,
                     env=env,
                     start_new_session=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL
+                    if logger.getEffectiveLevel() != logging.DEBUG
+                    else None,
+                    stderr=subprocess.DEVNULL
+                    if logger.getEffectiveLevel() != logging.DEBUG
+                    else None,
                 )
 
         except BlockingIOError:
@@ -269,18 +304,37 @@ class Firefox:
 
 class Chrome:
     """
+    (Warning) This is prone to breaking if you manually sign out of chrome
     Google Chrome executable names for supported platforms.
     Includes the file path to the chrome IndexedDB and the
     path to the chrome executable.
     Also has functions to open and close browser to keep session alive
     """
 
-    def __init__(self, profile_dir: str = "Default") -> None:
+    def __init__(
+        self,
+        open_browser_on_stale_token: bool = False,
+    ) -> None:
         self.windows_db_path: Path = CHROME_WINDOWS
         self.linux_db_path: Path = CHROME_LINUX
         self.mac_db_path: Path = CHROME_MAC
-        self.profile_dir: str = profile_dir
+        self.profile_dir: str = "Default"
+        try:
+            self._configure_platform_profile()
+        except:
+            if open_browser_on_stale_token:
+                logger.warning("Unable to extract fresh token opening browser")
+                self.open_and_close_browser(silence_file_stat_msgs=True)
+            raise
 
+    def __repr__(self) -> str:
+        vals = ", ".join([f"{k}={v}" for k, v in self.__dict__.items()])
+        return f"{self.__class__.__name__}({vals})"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    def _configure_platform_profile(self) -> None:
         if sys.platform == "win32":
             self.chrome_log_file_path, self._extracted_token, self.acc_id = (
                 _parse_log_file_for_path_token_id(self.windows_db_path)
@@ -317,13 +371,6 @@ class Chrome:
         self.path_to_profile_dir = self.data_dir / self.profile_dir
         self._file_to_stat_check = self.chrome_log_file_path
 
-    def __repr__(self) -> str:
-        vals = ", ".join([f"{k}={v}" for k, v in self.__dict__.items()])
-        return f"{self.__class__.__name__}({vals})"
-
-    def __str__(self) -> str:
-        return self.__repr__()
-
     def get_token(self) -> str | None:
         """
         Current parser uses the robinhood leveldb folder
@@ -357,6 +404,7 @@ class Chrome:
         retries: int = 3,
         time_until_close: float = 10,
         *,
+        silence_file_stat_msgs: bool = False,
         headless: bool = True,
     ) -> None:
         """
@@ -367,10 +415,13 @@ class Chrome:
             raise RuntimeError("blocking io error occurred too many times")
 
         env = os.environ.copy()
-        logger.debug(
-            "Pre-open time: %s",
-            datetime.fromtimestamp(self.chrome_log_file_path.stat().st_mtime),
-        )
+        if not silence_file_stat_msgs:
+            logger.debug(
+                "Pre-open time: %s",
+                datetime.fromtimestamp(
+                    self.chrome_log_file_path.stat().st_mtime
+                ),
+            )
         try:
             args = [
                 str(self.application_path),
@@ -397,8 +448,12 @@ class Chrome:
                     args,
                     env=env,
                     start_new_session=True,
-                    stderr=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL
+                    if logger.getEffectiveLevel() != logging.DEBUG
+                    else None,
+                    stderr=subprocess.DEVNULL
+                    if logger.getEffectiveLevel() != logging.DEBUG
+                    else None,
                 )
         except BlockingIOError:
             logger.warning("Blocking error trying again")
@@ -410,12 +465,13 @@ class Chrome:
             time.sleep(time_until_close)
         finally:
             _close_process(proc, is_firefox=False)
-            logger.debug(
-                "Post-open time: %s",
-                datetime.fromtimestamp(
-                    self.chrome_log_file_path.stat().st_mtime
-                ),
-            )
+            if not silence_file_stat_msgs:
+                logger.debug(
+                    "Post-open time: %s",
+                    datetime.fromtimestamp(
+                        self.chrome_log_file_path.stat().st_mtime
+                    ),
+                )
             if sys.platform == "darwin":
                 _close_firefox_profile_lock(self.path_to_profile_dir)
         return None
@@ -503,10 +559,10 @@ def _close_firefox_profile_lock(profile_path: Path) -> None:
 def _get_firefox_profile_token_and_id(
     f: Path,
     raise_err_on_stale_token: bool = True,
-) -> tuple[Path, str, str]:
+) -> tuple[Path, str]:
     """
-    Parses firefox profiles folder for a valid token then returns the
-    profile filepath.
+    Retuns the path to the DB and the access_token
+    Does not validate the extracted token
     """
     for n in f.iterdir():
         if not n.is_dir():
@@ -529,12 +585,12 @@ def _get_firefox_profile_token_and_id(
                 access_token = auth_dict["access_token"]
                 jwt = _decode_jwt(access_token)
                 if jwt["exp"] < int(time.time()):
-                    logger.warning("Stale token was retrieved in %s", n)
+                    logger.warning("Expired token was retrieved in %s", n)
                     if raise_err_on_stale_token:
-                        raise TokenExtractionError("stale token was retrieved")
-                # run a test to see if the token is valid
-                id = get_acc_id(access_token)
-                return n, access_token, id
+                        raise TokenExtractionError(
+                            "Expired token was retrieved"
+                        )
+                return n, access_token
             finally:
                 con.close()
         except sqlite3.OperationalError:
@@ -542,7 +598,9 @@ def _get_firefox_profile_token_and_id(
     raise TokenExtractionError("unable to find a valid token")
 
 
-def _parse_log_file_for_path_token_id(db_path: Path) -> tuple[Path, str, str]:
+def _parse_log_file_for_path_token_id(
+    db_path: Path,
+) -> tuple[Path, str, str]:
     """
     Returns Path to .log file, token, and account id
     """

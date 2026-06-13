@@ -106,7 +106,8 @@ class _CoreRobinhood(
         headless: bool = True,
     ) -> None:
         """
-        (Warning) If browser is open this function will break
+        (Warning) If browser is open this function will break, and raise
+        RuntimeError.
 
         For param 'browser' allows for manually override if you wish
         to change which browser the class uses.
