@@ -448,7 +448,7 @@ class AccountImpl(TypingBase):
         self.acc_id = acc_id
         return None
 
-    async def _get_account_value_impl(
+    async def _get_account_value(
         self, acc_id: str | None = None
     ) -> AccountValue | None:
         """

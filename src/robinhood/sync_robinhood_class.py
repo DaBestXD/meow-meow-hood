@@ -446,11 +446,11 @@ class Robinhood(_CoreRobinhood):
         """
         return self._run(self._get_option_meta_data(ids))
 
-    def get_account_value_impl(
+    def get_account_value(
         self, acc_id: str | None = None
     ) -> AccountValue | None:
         """
         Uses the classes' self.user_id if acc_id is not provided
         Returns an AccountValue dataclass
         """
-        return self._run(self._get_account_value_impl(acc_id))
+        return self._run(self._get_account_value(acc_id))
