@@ -256,30 +256,15 @@ class Firefox:
             )
         return None
 
-    # TODO: no need to have repeating work under both class change to one helper
-    # function and add the file to check as the param
-    # Example: _helper_last_accessed_greater_than_n_days(days, file_to_check)
     def last_accessed_greater_than_n_days(self, days: int = 1) -> bool:
-        last_accessed = self._file_to_stat_check.stat().st_mtime
-        last_accessed_at = datetime.fromtimestamp(last_accessed, timezone.utc)
-        stale_at = last_accessed_at + timedelta(days=days)
-        now = datetime.now(timezone.utc)
-
-        is_stale = now > stale_at
-        if is_stale:
-            logger.debug(
-                "Browser auth file has not been accesed in %d days", days
-            )
-        else:
-            remaining = stale_at - now
-            hours = remaining.total_seconds() / 3600
-            logger.debug(
-                "Browser auth file will be stale in %.1f hours (%d day threshold)",  # noqa E501
-                hours,
-                days,
-            )
-
-        return is_stale
+        """
+        Check if the last accessed time is older than 1(Default value) day
+        returns true if it is older than 1(Default value) day.
+        Default value of the of the comparsion can be changed
+        """
+        return _impl_last_accessed_greater_than_n_days(
+            self._file_to_stat_check, days
+        )
 
 
 class Chrome:
@@ -345,6 +330,7 @@ class Chrome:
         and the reads the log file for the bearer token.
         Incase of chrome profile recursively call the function twice
         File path: IndexedDB --> robinhood.leveldb dir --> 00XXX.log file
+        (Very hacky way to get the robinhood token but it works for now)
         """
         dump = self._file_to_stat_check.read_bytes().decode(errors="ignore")
         tokens = re.findall(
@@ -434,30 +420,10 @@ class Chrome:
                 _close_firefox_profile_lock(self.path_to_profile_dir)
         return None
 
-    # TODO: no need to have repeating work under both class change to one helper
-    # function and add the file to check as the param
-    # Example: _helper_last_accessed_greater_than_n_days(days, file_to_check)
     def last_accessed_greater_than_n_days(self, days: int = 1) -> bool:
-        last_accessed = self._file_to_stat_check.stat().st_mtime
-        last_accessed_at = datetime.fromtimestamp(last_accessed, timezone.utc)
-        stale_at = last_accessed_at + timedelta(days=days)
-        now = datetime.now(timezone.utc)
-
-        is_stale = now > stale_at
-        if is_stale:
-            logger.debug(
-                "Browser auth file has not been accesed in %d days", days
-            )
-        else:
-            remaining = stale_at - now
-            hours = remaining.total_seconds() / 3600
-            logger.debug(
-                "Browser auth file will be stale in %.1f hours (%d day threshold)",  # noqa E501
-                hours,
-                days,
-            )
-
-        return is_stale
+        return _impl_last_accessed_greater_than_n_days(
+            self._file_to_stat_check, days
+        )
 
 
 def _close_process(
@@ -637,3 +603,31 @@ def get_acc_id(bearer_token: str, retries: int = 3) -> str:
         return get_acc_id(bearer_token, retries - 1)
     else:
         raise AuthenticationError(f"token return {r.status_code} invalid token")
+
+
+def _impl_last_accessed_greater_than_n_days(
+    file_to_check: Path,
+    days: int = 1,
+) -> bool:
+    """
+    Check if the last accessed time is older than 1 day
+    returns true if it is older than 1 day.
+    """
+    last_accessed = file_to_check.stat().st_mtime
+    last_accessed_at = datetime.fromtimestamp(last_accessed, timezone.utc)
+    stale_at = last_accessed_at + timedelta(days=days)
+    now = datetime.now(timezone.utc)
+
+    is_stale = now > stale_at
+    if is_stale:
+        logger.debug("Browser auth file has not been accesed in %d days", days)
+    else:
+        remaining = stale_at - now
+        hours = remaining.total_seconds() / 3600
+        logger.debug(
+            "Browser auth file will be stale in %.1f hours (%d day threshold)",  # noqa E501
+            hours,
+            days,
+        )
+
+    return is_stale
