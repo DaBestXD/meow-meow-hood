@@ -79,7 +79,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run test suite
-        run: uv run python -m unittest discover -s tests
+        run: uv run pytest
 
   build:
     name: Build Package
