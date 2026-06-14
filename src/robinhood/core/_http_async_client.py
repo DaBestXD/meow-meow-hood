@@ -1,7 +1,7 @@
 """Async HTTP client used by the public Robinhood clients."""
 
 import logging
-from typing import Any
+from typing import Any, Never
 
 import aiohttp
 
@@ -30,7 +30,9 @@ class RobinhoodAsyncHTTPClient:
         await self.session.close()
 
     # This should be blocking maybe?
-    def _error_status_code_handler(self, endpoint: str, status_code: int):
+    def _error_status_code_handler(
+        self, endpoint: str, status_code: int
+    ) -> Never:
         """
         Raise the current package-level error for HTTP response statuses.
 

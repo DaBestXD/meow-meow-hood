@@ -30,6 +30,9 @@ Homepage = "https://github.com/DaBestXD/meow-meow-hood"
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.ty.src]
+include = ["src", "tests"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["robinhood*"]
@@ -51,6 +54,7 @@ indent-style = "space"
 "__init__.py" = ["F401"]
 
 [tool.pyright]
+include = ["src", "tests"]
 typeCheckingMode = "standard"
 pythonVersion = "3.11"
 venvPath = "."

@@ -2,6 +2,8 @@ import subprocess
 
 
 def main() -> None:
+    subprocess.run(["uvx", "ty", "check"])
+    subprocess.run(["uv", "run", "pyright"])
     subprocess.run(["ruff", "format"], check=True)
     subprocess.run(["ruff", "check", "--fix"], check=True)
     subprocess.run(["uv", "run", "pytest"], check=True)
