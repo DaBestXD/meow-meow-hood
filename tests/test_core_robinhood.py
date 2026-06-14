@@ -13,10 +13,10 @@ class FakeBrowser:
     windows_db_path = Path("unused")
     linux_db_path = Path("unused")
     mac_db_path = Path("unused")
-    token: str | None = "browser-token"
+    token = "browser-token"
     acc_id = "ACC123"
 
-    def __init__(self) -> None:
+    def __init__(self, open_browser_on_stale_token: bool = False) -> None:
         self._file_to_stat_check = Path("unused")
         self._extracted_token = self.token
         self.get_token_mock = Mock(return_value=self.token)
@@ -68,7 +68,7 @@ class TestCoreRobinhoodInit:
             ) as mock_http_client,
         ):
             client = Robinhood(
-                config_path="/tmp",
+                config_path=Path("/tmp"),
                 browser_type=FakeBrowser,
                 logging_level=None,
             )
@@ -106,7 +106,7 @@ class TestCoreRobinhoodInit:
 
     def test_init_raises_when_browser_returns_no_token(self) -> None:
         class EmptyBrowser(FakeBrowser):
-            token = None
+            token = ""
 
         with (
             patch(

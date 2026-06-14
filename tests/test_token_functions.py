@@ -17,13 +17,20 @@ class FakeBrowser:
     windows_db_path = Path("unused")
     linux_db_path = Path("unused")
     mac_db_path = Path("unused")
+    acc_id = "ACC123"
 
     def __init__(
         self,
-        stat_file: Path,
+        open_browser_on_stale_token: bool | Path = False,
         token: str | None = "new-token",
     ) -> None:
+        stat_file = (
+            open_browser_on_stale_token
+            if isinstance(open_browser_on_stale_token, Path)
+            else Path("unused")
+        )
         self._file_to_stat_check = stat_file
+        self._extracted_token = token or ""
         self.get_token_mock = Mock(return_value=token)
         self.open_and_close_browser_mock = Mock()
         self.last_accessed_greater_than_n_days_mock = Mock(return_value=False)

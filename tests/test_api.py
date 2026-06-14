@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
@@ -35,6 +34,7 @@ from robinhood.dataclasses.api_dataclasses import (
 from robinhood.dataclasses.watchlist_classes import Future
 from robinhood.sync_robinhood_class import Robinhood
 from tests.support import (
+    MockAsyncHTTPClient,
     build_async_robinhood_client,
     build_index_quote_payload,
     build_instrument_quote_payload,
@@ -47,6 +47,8 @@ from tests.support import (
     build_watchlist_instrument_payload,
     build_watchlist_option_strategy_payload,
     build_watchlist_payload,
+    get_http_mock,
+    set_mock_attr,
 )
 
 
@@ -70,12 +72,7 @@ class FakeCache:
 
 def build_async_api_client(*, db_cache: object | None = None) -> AsyncRobinhood:
     client = build_async_robinhood_client(
-        http_client=SimpleNamespace(
-            _get=AsyncMock(),
-            _post=AsyncMock(),
-            _delete=AsyncMock(),
-            close=AsyncMock(),
-        ),
+        http_client=MockAsyncHTTPClient(),
         db_cache=db_cache,
     )
     return client
@@ -87,37 +84,43 @@ class TestAsyncRobinhoodAPI:
     def _set_client_tracker(self, async_client_tracker) -> None:
         self.track_client = async_client_tracker
 
-    def _track_loop(self, client: AsyncRobinhood) -> AsyncRobinhood:
-        return self.track_client(client)
+    def _track_loop(
+        self,
+        client: AsyncRobinhood,
+    ) -> tuple[AsyncRobinhood, MockAsyncHTTPClient]:
+        client = self.track_client(client)
+        return client, get_http_mock(client)
 
     async def test_get_stock_quotes_normalizes_single_symbol(self) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         quote_payload = build_instrument_quote_payload(symbol="SPY")
-        client._async_http_client._get.return_value = [quote_payload]
+        http_client._get.return_value = [quote_payload]
 
         result = await client.get_stock_quotes("spy")
 
         assert InstrumentQuote.from_json(quote_payload) == result
-        client._async_http_client._get.assert_awaited_once_with(
+        http_client._get.assert_awaited_once_with(
             endpoint=API_QUOTES,
             params={PARAM_SYMBOLS: "SPY"},
         )
 
     async def test_get_stock_info_inserts_rows_into_cache(self) -> None:
         db_cache = Mock()
-        client = self._track_loop(build_async_api_client(db_cache=db_cache))
+        client, http_client = self._track_loop(
+            build_async_api_client(db_cache=db_cache)
+        )
         stock_info_payload = build_stock_info_payload(
             symbol="SPY",
             id="stock-id",
             tradable_chain_id="chain-id",
         )
         expected = StockInfo.from_json(stock_info_payload)
-        client._async_http_client._get.return_value = [stock_info_payload]
+        http_client._get.return_value = [stock_info_payload]
 
         result = await client.get_stock_info(["spy", "qqq"])
 
         assert [expected] == result
-        client._async_http_client._get.assert_awaited_once_with(
+        http_client._get.assert_awaited_once_with(
             endpoint=API_INSTRUMENTS,
             params={PARAM_SYMBOLS: "SPY,QQQ"},
         )
@@ -126,7 +129,7 @@ class TestAsyncRobinhoodAPI:
     async def test_get_index_quotes_returns_list_from_nested_payload(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         vix_payload = build_index_quote_payload(
             symbol="VIX",
             instrument_id="vix-id",
@@ -137,7 +140,7 @@ class TestAsyncRobinhoodAPI:
             instrument_id="spx-id",
             value="5000.1",
         )
-        client._async_http_client._get.return_value = [
+        http_client._get.return_value = [
             {"data": [{"data": vix_payload}, {"data": spx_payload}]}
         ]
 
@@ -147,7 +150,7 @@ class TestAsyncRobinhoodAPI:
             IndexQuote.from_json(vix_payload),
             IndexQuote.from_json(spx_payload),
         ] == result
-        client._async_http_client._get.assert_awaited_once_with(
+        http_client._get.assert_awaited_once_with(
             endpoint=API_INDEX_QUOTE,
             params={PARAM_SYMBOLS: "VIX,SPX"},
         )
@@ -155,9 +158,9 @@ class TestAsyncRobinhoodAPI:
     async def test_get_option_chain_data_skips_symbols_without_chain_ids(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         chain_payload = build_option_chain_payload(id="chain-id", symbol="SPY")
-        client._async_http_client._get.side_effect = [
+        http_client._get.side_effect = [
             [
                 {"tradable_chain_id": None},
                 {"tradable_chain_id": "chain-id"},
@@ -183,7 +186,7 @@ class TestAsyncRobinhoodAPI:
                     "params": {PARAM_ID: "chain-id"},
                 },
             ),
-        ] == client._async_http_client._get.call_args_list
+        ] == http_client._get.call_args_list
 
     async def test_get_strike_prices_returns_cached_strikes_without_http(
         self,
@@ -191,7 +194,9 @@ class TestAsyncRobinhoodAPI:
         db_cache = Mock()
         db_cache.is_option_request_synced.return_value = True
         db_cache.fetch_strike_prices.side_effect = [[495.0, 500.0], [490.0]]
-        client = self._track_loop(build_async_api_client(db_cache=db_cache))
+        client, http_client = self._track_loop(
+            build_async_api_client(db_cache=db_cache)
+        )
 
         result = await client.get_strike_prices(
             symbol="SPY",
@@ -199,12 +204,12 @@ class TestAsyncRobinhoodAPI:
         )
 
         assert ([495.0, 500.0], [490.0]) == result
-        client._async_http_client._get.assert_not_awaited()
+        http_client._get.assert_not_awaited()
 
     async def test_get_future_quote_returns_single_quote_for_single_id(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         future_id = "00000000-0000-4000-8000-000000000001"
         quote_payload = {
             "ask_price": "1.0",
@@ -222,14 +227,15 @@ class TestAsyncRobinhoodAPI:
             "updated_at": "2026-04-01T09:30:00Z",
             "out_of_band": False,
         }
-        client._async_http_client._get.return_value = [
+        http_client._get.return_value = [
             {"data": [{"status": "SUCCESS", "data": quote_payload}]}
         ]
 
         result = await client.get_future_quote(future_id)
 
+        assert result is not None
         assert future_id == result.instrument_id
-        client._async_http_client._get.assert_awaited_once_with(
+        http_client._get.assert_awaited_once_with(
             endpoint=API_FUTURES_QUOTES,
             params={PARAM_ID: future_id},
         )
@@ -237,22 +243,22 @@ class TestAsyncRobinhoodAPI:
     async def test_get_future_quote_raises_for_more_than_twenty_ids(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         ids = [f"00000000-0000-4000-8000-{n:012d}" for n in range(21)]
 
         with pytest.raises(ValueError):
             await client.get_future_quote(ids)
 
     async def test_get_account_option_positions_parses_payloads(self) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         client.acc_id = "ACC123"
         payload = build_option_position_payload()
-        client._async_http_client._get.return_value = [payload]
+        http_client._get.return_value = [payload]
 
         result = await client.get_account_option_positions()
 
         assert [OptionPosition.from_json(payload)] == result
-        client._async_http_client._get.assert_awaited_once_with(
+        http_client._get.assert_awaited_once_with(
             endpoint=API_POSITIONS_OPTIONS,
             params={
                 PARAM_NON_ZERO: "true",
@@ -263,19 +269,19 @@ class TestAsyncRobinhoodAPI:
     async def test_get_option_order_history_returns_empty_for_invalid_user_id(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         client.acc_id = 403
 
         result = await client.get_option_order_history()
 
         assert [] == result
-        client._async_http_client._get.assert_not_awaited()
+        http_client._get.assert_not_awaited()
 
     async def test_get_stock_order_history_warns_for_invalid_user_id(
         self,
         caplog,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         client.acc_id = 403
 
         with caplog.at_level(
@@ -288,11 +294,11 @@ class TestAsyncRobinhoodAPI:
         assert "user_id not valid" in caplog.text
 
     async def test_get_watchlists_parses_supported_item_types(self) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         watchlist_payload = build_watchlist_payload(
             id="watchlist-id", display_name="Default"
         )
-        client._async_http_client._get.side_effect = [
+        http_client._get.side_effect = [
             [watchlist_payload],
             [
                 build_watchlist_option_strategy_payload(),
@@ -310,6 +316,7 @@ class TestAsyncRobinhoodAPI:
 
         result = await client.get_watchlists()
 
+        assert result is not None
         assert "Default" == result[0].name
         assert 4 == len(result[0].items)
         assert isinstance(result[0].items[-1], Future)
@@ -322,18 +329,18 @@ class TestAsyncRobinhoodAPI:
                     PARAM_LOAD_ALL_ATTRIBUTES: "False",
                 },
             ),
-        ] == client._async_http_client._get.call_args_list
+        ] == http_client._get.call_args_list
 
     async def test_create_watchlist_posts_sample_payload(self) -> None:
-        client = self._track_loop(build_async_api_client())
-        client._async_http_client._post.return_value = {"id": "watchlist-id"}
+        client, http_client = self._track_loop(build_async_api_client())
+        http_client._post.return_value = {"id": "watchlist-id"}
 
         result = await client.create_watchlist("blahblah")
 
         assert "blahblah" == result.name
         assert "watchlist-id" == result.id
         assert [] == result.items
-        client._async_http_client._post.assert_awaited_once_with(
+        http_client._post.assert_awaited_once_with(
             endpoint=API_WATCHLIST,
             json={
                 "display_name": "blahblah",
@@ -345,8 +352,8 @@ class TestAsyncRobinhoodAPI:
     async def test_delete_watchlist_resolves_id_and_deletes_by_endpoint(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
-        client._async_http_client._get.side_effect = [
+        client, http_client = self._track_loop(build_async_api_client())
+        http_client._get.side_effect = [
             [
                 build_watchlist_payload(
                     id="watchlist-id",
@@ -358,13 +365,13 @@ class TestAsyncRobinhoodAPI:
 
         await client.delete_watchlist("Default")
 
-        client._async_http_client._delete.assert_awaited_once_with(
+        http_client._delete.assert_awaited_once_with(
             endpoint=API_WATCHLIST + "watchlist-id/",
         )
 
     async def test_delete_watchlist_skips_delete_when_missing(self) -> None:
-        client = self._track_loop(build_async_api_client())
-        client._async_http_client._get.return_value = [
+        client, http_client = self._track_loop(build_async_api_client())
+        http_client._get.return_value = [
             build_watchlist_payload(
                 id="watchlist-id",
                 display_name="Default",
@@ -373,23 +380,31 @@ class TestAsyncRobinhoodAPI:
 
         await client.delete_watchlist("Missing")
 
-        client._async_http_client._delete.assert_not_awaited()
+        http_client._delete.assert_not_awaited()
 
     async def test_add_item_to_watchlist_resolves_instrument_and_list(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         quote = InstrumentQuote.from_json(
             build_instrument_quote_payload(
                 instrument_id="instrument-id",
                 symbol="SPY",
             )
         )
-        client._get_stock_quotes = AsyncMock(return_value=quote)
-        client._get_index_quotes = AsyncMock(return_value=None)
-        client._get_future_quote = AsyncMock(return_value=None)
-        client._get_currency_quote = AsyncMock(return_value=None)
-        client._async_http_client._get.side_effect = [
+        get_stock_quotes = set_mock_attr(
+            client,
+            "_get_stock_quotes",
+            AsyncMock(return_value=quote),
+        )
+        set_mock_attr(client, "_get_index_quotes", AsyncMock(return_value=None))
+        set_mock_attr(client, "_get_future_quote", AsyncMock(return_value=None))
+        set_mock_attr(
+            client,
+            "_get_currency_quote",
+            AsyncMock(return_value=None),
+        )
+        http_client._get.side_effect = [
             [
                 build_watchlist_payload(
                     id="watchlist-id",
@@ -398,15 +413,13 @@ class TestAsyncRobinhoodAPI:
             ],
             [],
         ]
-        client._async_http_client._post.return_value = {
-            "id": "watchlist-item-id"
-        }
+        http_client._post.return_value = {"id": "watchlist-item-id"}
 
         result = await client.add_item_to_watchlist("SPY", "Default")
 
         assert {"id": "watchlist-item-id"} == result
-        client._get_stock_quotes.assert_awaited_once_with("SPY")
-        client._async_http_client._post.assert_awaited_once_with(
+        get_stock_quotes.assert_awaited_once_with("SPY")
+        http_client._post.assert_awaited_once_with(
             endpoint=API_WATCHLIST_ITEMS,
             json={
                 "watchlist-id": [
@@ -422,18 +435,24 @@ class TestAsyncRobinhoodAPI:
     async def test_add_item_to_watchlist_returns_none_for_missing_watchlist(
         self,
     ) -> None:
-        client = self._track_loop(build_async_api_client())
+        client, http_client = self._track_loop(build_async_api_client())
         quote = InstrumentQuote.from_json(
             build_instrument_quote_payload(
                 instrument_id="instrument-id",
                 symbol="SPY",
             )
         )
-        client._get_stock_quotes = AsyncMock(return_value=quote)
-        client._get_index_quotes = AsyncMock(return_value=None)
-        client._get_future_quote = AsyncMock(return_value=None)
-        client._get_currency_quote = AsyncMock(return_value=None)
-        client._async_http_client._get.return_value = [
+        set_mock_attr(
+            client, "_get_stock_quotes", AsyncMock(return_value=quote)
+        )
+        set_mock_attr(client, "_get_index_quotes", AsyncMock(return_value=None))
+        set_mock_attr(client, "_get_future_quote", AsyncMock(return_value=None))
+        set_mock_attr(
+            client,
+            "_get_currency_quote",
+            AsyncMock(return_value=None),
+        )
+        http_client._get.return_value = [
             build_watchlist_payload(
                 id="watchlist-id",
                 display_name="Default",
@@ -443,7 +462,7 @@ class TestAsyncRobinhoodAPI:
         result = await client.add_item_to_watchlist("SPY", "Missing")
 
         assert result is None
-        client._async_http_client._post.assert_not_awaited()
+        http_client._post.assert_not_awaited()
 
 
 class TestSyncRobinhoodAPI:
@@ -453,7 +472,7 @@ class TestSyncRobinhoodAPI:
 
     def make_client(self) -> Robinhood:
         client = build_robinhood_client(
-            http_client=SimpleNamespace(close=AsyncMock()),
+            http_client=MockAsyncHTTPClient(),
             db_cache=Mock(),
         )
         return self.track_client(client)
@@ -468,29 +487,42 @@ class TestSyncRobinhoodAPI:
         mock_close.assert_called_once_with()
 
     def test_close_closes_cache_http_client_and_event_loop(self) -> None:
-        client = self.make_client()
-        db_cache = client._db_cache
+        db_cache = Mock()
+        client = build_robinhood_client(
+            http_client=MockAsyncHTTPClient(),
+            db_cache=db_cache,
+        )
+        self.track_client(client)
+        http_client = get_http_mock(client)
 
         client.close()
 
         db_cache.close.assert_called_once_with()
-        client._async_http_client.close.assert_awaited_once_with()
+        http_client.close.assert_awaited_once_with()
         assert client.event_loop.is_closed()
         assert client._db_cache is None
 
     def test_get_account_stock_positions_returns_private_result(self) -> None:
         client = self.make_client()
         expected = [StockPosition.from_json(build_stock_position_payload())]
-        client._get_account_stock_positions = AsyncMock(return_value=expected)
+        get_account_stock_positions = set_mock_attr(
+            client,
+            "_get_account_stock_positions",
+            AsyncMock(return_value=expected),
+        )
 
         result = client.get_account_stock_positions()
 
         assert expected == result
-        client._get_account_stock_positions.assert_awaited_once_with()
+        get_account_stock_positions.assert_awaited_once_with()
 
     def test_create_watchlist_returns_private_result(self) -> None:
         client = self.make_client()
-        client._create_watchlist = AsyncMock(return_value={"id": "list-id"})
+        create_watchlist = set_mock_attr(
+            client,
+            "_create_watchlist",
+            AsyncMock(return_value={"id": "list-id"}),
+        )
 
         result = client.create_watchlist(
             "Temp",
@@ -499,36 +531,43 @@ class TestSyncRobinhoodAPI:
         )
 
         assert {"id": "list-id"} == result
-        client._create_watchlist.assert_awaited_once_with("Temp", "*", 2)
+        create_watchlist.assert_awaited_once_with("Temp", "*", 2)
 
     def test_delete_watchlist_returns_private_result(self) -> None:
         client = self.make_client()
-        client._delete_watchlist = AsyncMock(return_value=None)
+        delete_watchlist = set_mock_attr(
+            client,
+            "_delete_watchlist",
+            AsyncMock(return_value=None),
+        )
 
         result = client.delete_watchlist("Temp")
 
         assert result is None
-        client._delete_watchlist.assert_awaited_once_with("Temp")
+        delete_watchlist.assert_awaited_once_with("Temp")
 
     def test_add_item_to_watchlist_returns_private_result(self) -> None:
         client = self.make_client()
-        client._add_item_to_watchlist = AsyncMock(
-            return_value={"id": "item-id"}
+        add_item_to_watchlist = set_mock_attr(
+            client,
+            "_add_item_to_watchlist",
+            AsyncMock(return_value={"id": "item-id"}),
         )
 
         result = client.add_item_to_watchlist("SPY", "Temp")
 
         assert {"id": "item-id"} == result
-        client._add_item_to_watchlist.assert_awaited_once_with("SPY", "Temp")
+        add_item_to_watchlist.assert_awaited_once_with("SPY", "Temp")
 
     def test_refresh_access_token_uses_current_browser(self) -> None:
         client = self.make_client()
         browser = Mock()
         browser.last_accessed_greater_than_n_days.return_value = False
-        client.browser_type = browser
-        client._async_http_client.access_token = "old-token"
-        client._async_http_client.update_session_token = Mock()
-        client._async_http_client.session = object()
+        set_mock_attr(client, "browser_type", browser)
+        http_client = get_http_mock(client)
+        http_client.access_token = "old-token"
+        http_client.update_session_token = Mock()
+        http_client.session = object()
 
         with patch(
             "robinhood.core._core_robinhood._refresh_access_token",
@@ -538,8 +577,6 @@ class TestSyncRobinhoodAPI:
 
         browser.open_and_close_browser.assert_not_called()
         mock_refresh.assert_called_once_with("old-token", browser)
-        client._async_http_client.update_session_token.assert_called_once_with(
-            "new-token"
-        )
-        assert "new-token" == client._async_http_client.access_token
-        assert client._async_http_client.session is None
+        http_client.update_session_token.assert_called_once_with("new-token")
+        assert "new-token" == http_client.access_token
+        assert http_client.session is None

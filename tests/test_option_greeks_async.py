@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,10 +10,13 @@ from robinhood.async_robinhood_class import AsyncRobinhood
 from robinhood.constants import API_OPTIONS_GREEKS_DATA, PARAM_OPTION_IDS
 from robinhood.dataclasses.api_dataclasses import OptionChain, OptionRequest
 from tests.support import (
+    MockAsyncHTTPClient,
     build_async_robinhood_client,
     build_option_chain_payload,
     build_option_greek_data,
     build_option_instrument,
+    get_http_mock,
+    set_mock_attr,
 )
 
 
@@ -36,13 +38,15 @@ class FakeCache:
         return {option_request: self._ids_by_request[option_request]}
 
 
-def build_async_client(*, db_cache: object | None = None) -> AsyncRobinhood:
+def build_async_client(
+    *, db_cache: object | None = None
+) -> tuple[AsyncRobinhood, MockAsyncHTTPClient]:
     client = build_async_robinhood_client(
-        http_client=SimpleNamespace(_get=AsyncMock()),
+        http_client=MockAsyncHTTPClient(),
         db_cache=db_cache,
     )
     client.event_loop.close()
-    return client
+    return client, get_http_mock(client)
 
 
 @pytest.mark.asyncio
@@ -50,7 +54,7 @@ class TestAsyncOptionGreeks:
     async def test_resolve_option_greeks_from_ids_chunks_dedupes_and_rebuilds(
         self,
     ) -> None:
-        client = build_async_client()
+        client, _http_client = build_async_client()
         req1 = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         req2 = OptionRequest(symbol="SPY", exp_date="2026-04-24")
         req3 = OptionRequest(symbol="QQQ", exp_date="2026-04-17")
@@ -67,7 +71,11 @@ class TestAsyncOptionGreeks:
                 if option_id != "missing"
             ]
 
-        client._get_option_greek_data = fake_get_option_greek_data
+        set_mock_attr(
+            client,
+            "_get_option_greek_data",
+            fake_get_option_greek_data,
+        )
 
         result = await client._resolve_option_greeks_from_ids(
             [req1, req2, req3], req_to_ids
@@ -85,29 +93,33 @@ class TestAsyncOptionGreeks:
     async def test_resolve_option_greeks_from_ids_returns_empty_for_empty_ids(
         self,
     ) -> None:
-        client = build_async_client()
+        client, _http_client = build_async_client()
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
-        client._get_option_greek_data = AsyncMock()
+        get_option_greek_data = set_mock_attr(
+            client,
+            "_get_option_greek_data",
+            AsyncMock(),
+        )
 
         result = await client._resolve_option_greeks_from_ids(
             [request], {request: []}
         )
 
         assert {request: []} == result
-        client._get_option_greek_data.assert_not_awaited()
+        get_option_greek_data.assert_not_awaited()
 
     async def test_resolve_option_greeks_starts_all_chunks_before_failure(
         self,
     ) -> None:
-        client = build_async_client()
+        client, _http_client = build_async_client()
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         option_ids = [f"id{i}" for i in range(400)]
         second_chunk_started = asyncio.Event()
         release_second_chunk = asyncio.Event()
         second_chunk_finished = asyncio.Event()
 
-        async def fake_get_option_greek_data(batch_ids: list[str]) -> list:
-            if batch_ids[0] == "id0":
+        async def fake_get_option_greek_data(option_ids: list[str]) -> list:
+            if option_ids[0] == "id0":
                 await second_chunk_started.wait()
                 raise RuntimeError("boom")
             second_chunk_started.set()
@@ -115,10 +127,14 @@ class TestAsyncOptionGreeks:
             second_chunk_finished.set()
             return [
                 build_option_greek_data(instrument_id=option_id)
-                for option_id in batch_ids
+                for option_id in option_ids
             ]
 
-        client._get_option_greek_data = fake_get_option_greek_data
+        set_mock_attr(
+            client,
+            "_get_option_greek_data",
+            fake_get_option_greek_data,
+        )
 
         with pytest.raises(RuntimeError, match="boom"):
             await client._resolve_option_greeks_from_ids(
@@ -133,10 +149,14 @@ class TestAsyncOptionGreeks:
         self,
         caplog,
     ) -> None:
-        client = build_async_client()
+        client, _http_client = build_async_client()
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
-        client._get_option_chain_data = AsyncMock(return_value=None)
-        client._get_oi_helper = AsyncMock()
+        set_mock_attr(
+            client,
+            "_get_option_chain_data",
+            AsyncMock(return_value=None),
+        )
+        get_oi_helper = set_mock_attr(client, "_get_oi_helper", AsyncMock())
 
         with caplog.at_level(
             "WARNING",
@@ -146,12 +166,12 @@ class TestAsyncOptionGreeks:
 
         assert {request: []} == result
         assert "No chains returned for all option request" in caplog.text
-        client._get_oi_helper.assert_not_awaited()
+        get_oi_helper.assert_not_awaited()
 
     async def test_no_db_option_greeks_batch_request_uses_single_chain_object(
         self,
     ) -> None:
-        client = build_async_client()
+        client, _http_client = build_async_client()
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         chain = OptionChain.from_json(
             build_option_chain_payload(id="chain-id", symbol="SPY")
@@ -164,20 +184,30 @@ class TestAsyncOptionGreeks:
         expected = {
             request: [build_option_greek_data(instrument_id="instrument-id")]
         }
-        client._get_option_chain_data = AsyncMock(return_value=chain)
-        client._get_oi_helper = AsyncMock(return_value=[option_instrument])
-        client._resolve_option_greeks_from_ids = AsyncMock(
-            return_value=expected
+        set_mock_attr(
+            client,
+            "_get_option_chain_data",
+            AsyncMock(return_value=chain),
+        )
+        get_oi_helper = set_mock_attr(
+            client,
+            "_get_oi_helper",
+            AsyncMock(return_value=[option_instrument]),
+        )
+        resolve_option_greeks_from_ids = set_mock_attr(
+            client,
+            "_resolve_option_greeks_from_ids",
+            AsyncMock(return_value=expected),
         )
 
         result = await client._no_db_option_greeks_batch_request([request])
 
         assert expected == result
-        client._get_oi_helper.assert_awaited_once_with(
+        get_oi_helper.assert_awaited_once_with(
             [request],
             {"SPY": "chain-id"},
         )
-        client._resolve_option_greeks_from_ids.assert_awaited_once_with(
+        resolve_option_greeks_from_ids.assert_awaited_once_with(
             [request],
             {request: ["instrument-id"]},
         )
@@ -185,26 +215,26 @@ class TestAsyncOptionGreeks:
     async def test_get_option_greeks_batch_request_normalizes_single_request(
         self,
     ) -> None:
-        client = build_async_client()
+        client, _http_client = build_async_client()
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         expected = {request: [build_option_greek_data(instrument_id="id1")]}
-        client._no_db_option_greeks_batch_request = AsyncMock(
-            return_value=expected
+        no_db_option_greeks_batch_request = set_mock_attr(
+            client,
+            "_no_db_option_greeks_batch_request",
+            AsyncMock(return_value=expected),
         )
 
         result = await client._get_option_greeks_batch_request(request)
 
         assert expected == result
-        client._no_db_option_greeks_batch_request.assert_awaited_once_with(
-            [request]
-        )
+        no_db_option_greeks_batch_request.assert_awaited_once_with([request])
 
     async def test_get_option_greeks_batch_request_merges_cache_hits_and_misses(
         self,
     ) -> None:
         cached_request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
         missed_request = OptionRequest(symbol="QQQ", exp_date="2026-04-17")
-        client = build_async_client(
+        client, _http_client = build_async_client(
             db_cache=FakeCache(
                 synced_requests={cached_request},
                 ids_by_request={cached_request: ["cached-1", "cached-2"]},
@@ -219,11 +249,15 @@ class TestAsyncOptionGreeks:
         live_result = {
             missed_request: [build_option_greek_data(instrument_id="live-1")]
         }
-        client._resolve_option_greeks_from_ids = AsyncMock(
-            return_value=cached_result
+        resolve_option_greeks_from_ids = set_mock_attr(
+            client,
+            "_resolve_option_greeks_from_ids",
+            AsyncMock(return_value=cached_result),
         )
-        client._no_db_option_greeks_batch_request = AsyncMock(
-            return_value=live_result
+        no_db_option_greeks_batch_request = set_mock_attr(
+            client,
+            "_no_db_option_greeks_batch_request",
+            AsyncMock(return_value=live_result),
         )
 
         result = await client._get_option_greeks_batch_request(
@@ -234,11 +268,11 @@ class TestAsyncOptionGreeks:
             cached_request: cached_result[cached_request],
             missed_request: live_result[missed_request],
         } == result
-        client._resolve_option_greeks_from_ids.assert_awaited_once_with(
+        resolve_option_greeks_from_ids.assert_awaited_once_with(
             [cached_request],
             {cached_request: ["cached-1", "cached-2"]},
         )
-        client._no_db_option_greeks_batch_request.assert_awaited_once_with(
+        no_db_option_greeks_batch_request.assert_awaited_once_with(
             [missed_request]
         )
 
@@ -247,16 +281,22 @@ class TestAsyncOptionGreeks:
         caplog,
     ) -> None:
         request = OptionRequest(symbol="SPY", exp_date="2026-04-17")
-        client = build_async_client(
+        client, _http_client = build_async_client(
             db_cache=FakeCache(
                 synced_requests={request},
                 ids_by_request={request: ["cached-1"]},
             )
         )
-        client._resolve_option_greeks_from_ids = AsyncMock(
-            return_value={request: []}
+        set_mock_attr(
+            client,
+            "_resolve_option_greeks_from_ids",
+            AsyncMock(return_value={request: []}),
         )
-        client._no_db_option_greeks_batch_request = AsyncMock(return_value={})
+        set_mock_attr(
+            client,
+            "_no_db_option_greeks_batch_request",
+            AsyncMock(return_value={}),
+        )
 
         with caplog.at_level(
             "DEBUG",
@@ -273,7 +313,7 @@ class TestAsyncOptionGreeks:
         self,
         caplog,
     ) -> None:
-        client = build_async_client()
+        client, http_client = build_async_client()
 
         with caplog.at_level(
             "WARNING",
@@ -283,19 +323,19 @@ class TestAsyncOptionGreeks:
 
         assert [] == result
         assert "warning no option id supplied" in caplog.text
-        client._async_http_client._get.assert_not_awaited()
+        http_client._get.assert_not_awaited()
 
     async def test_get_option_greek_data_fetches_payloads_for_option_ids(
         self,
     ) -> None:
-        client = build_async_client()
+        client, http_client = build_async_client()
         greek = build_option_greek_data(instrument_id="id-1")
-        client._async_http_client._get = AsyncMock(return_value=[asdict(greek)])
+        http_client._get.return_value = [asdict(greek)]
 
         result = await client._get_option_greek_data(["id-1"])
 
         assert [greek] == result
-        client._async_http_client._get.assert_awaited_once_with(
+        http_client._get.assert_awaited_once_with(
             endpoint=API_OPTIONS_GREEKS_DATA,
             params={PARAM_OPTION_IDS: "id-1"},
         )

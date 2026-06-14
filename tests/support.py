@@ -3,8 +3,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+from unittest.mock import AsyncMock, Mock
+
+import aiohttp
+from multidict import CIMultiDict, CIMultiDictProxy
+from yarl import URL
 
 from robinhood.dataclasses.api_dataclasses import (
     OptionGreekData,
@@ -14,7 +19,77 @@ from robinhood.dataclasses.api_dataclasses import (
 if TYPE_CHECKING:
     from robinhood.async_robinhood_class import AsyncRobinhood
     from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
+    from robinhood.db_logic.option_cache import OptionCache
     from robinhood.sync_robinhood_class import Robinhood
+
+T = TypeVar("T")
+
+
+class MockAsyncHTTPClient:
+    def __init__(self) -> None:
+        self._get = AsyncMock()
+        self._post = AsyncMock()
+        self._delete = AsyncMock()
+        self.close = AsyncMock()
+        self.update_session_token = Mock()
+        self.access_token = "bearer-token"
+        self.session: object | None = None
+
+
+def set_mock_attr(obj: object, name: str, value: T) -> T:
+    setattr(cast(Any, obj), name, value)
+    return value
+
+
+def build_client_response_error(
+    status: int,
+) -> aiohttp.ClientResponseError:
+    url = URL("https://api.robinhood.com/test/")
+    request_info = aiohttp.RequestInfo(
+        url=url,
+        method="GET",
+        headers=cast(CIMultiDictProxy[str], CIMultiDictProxy(CIMultiDict())),
+        real_url=url,
+    )
+    return aiohttp.ClientResponseError(request_info, (), status=status)
+
+
+def build_async_http_mock_client() -> MockAsyncHTTPClient:
+    return MockAsyncHTTPClient()
+
+
+def build_async_robinhood_mock_client(
+    *,
+    db_cache: object | None = None,
+    configure: Callable[[MockAsyncHTTPClient], None] | None = None,
+) -> tuple[AsyncRobinhood, MockAsyncHTTPClient]:
+    http_client = MockAsyncHTTPClient()
+    if configure is not None:
+        configure(http_client)
+    client = build_async_robinhood_client(
+        http_client=http_client,
+        db_cache=db_cache,
+    )
+    return client, http_client
+
+
+def build_robinhood_mock_client(
+    *,
+    db_cache: object | None = None,
+    configure: Callable[[MockAsyncHTTPClient], None] | None = None,
+) -> tuple[Robinhood, MockAsyncHTTPClient]:
+    http_client = MockAsyncHTTPClient()
+    if configure is not None:
+        configure(http_client)
+    client = build_robinhood_client(
+        http_client=http_client,
+        db_cache=db_cache,
+    )
+    return client, http_client
+
+
+def get_http_mock(client: object) -> MockAsyncHTTPClient:
+    return cast(MockAsyncHTTPClient, cast(Any, client)._async_http_client)
 
 
 def build_test_jwt(*, exp: int) -> str:
@@ -519,10 +594,11 @@ def build_robinhood_client(
     from robinhood.sync_robinhood_class import Robinhood
 
     client = Robinhood.__new__(Robinhood)
-    client._async_http_client = (
-        http_client if http_client is not None else Mock()
+    client._async_http_client = cast(
+        "RobinhoodAsyncHTTPClient",
+        http_client if http_client is not None else MockAsyncHTTPClient(),
     )
-    client._db_cache = db_cache
+    client._db_cache = cast("OptionCache | None", db_cache)
     client.event_loop = asyncio.new_event_loop()
     return client
 
@@ -535,10 +611,11 @@ def build_async_robinhood_client(
     from robinhood.async_robinhood_class import AsyncRobinhood
 
     client = AsyncRobinhood.__new__(AsyncRobinhood)
-    client._async_http_client = (
-        http_client if http_client is not None else Mock()
+    client._async_http_client = cast(
+        "RobinhoodAsyncHTTPClient",
+        http_client if http_client is not None else MockAsyncHTTPClient(),
     )
-    client._db_cache = db_cache
+    client._db_cache = cast("OptionCache | None", db_cache)
     client.event_loop = asyncio.new_event_loop()
     return client
 
@@ -549,7 +626,10 @@ def build_http_client(
     from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
 
     client = RobinhoodAsyncHTTPClient.__new__(RobinhoodAsyncHTTPClient)
-    client.session = session if session is not None else Mock()
+    client.session = cast(
+        aiohttp.ClientSession,
+        session if session is not None else Mock(),
+    )
     client.access_token = "bearer-token"
     client.user_agent = None
     return client

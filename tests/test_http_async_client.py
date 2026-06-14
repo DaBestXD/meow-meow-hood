@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, Mock, patch
 
-import aiohttp
 import pytest
 
 from robinhood import AuthenticationError, RateLimitError
 from robinhood.constants import BASE_API_BONFIRE_LINK, BASE_API_LINK
 from robinhood.core._http_async_client import RobinhoodAsyncHTTPClient
-from tests.support import build_http_client
+from tests.support import (
+    build_client_response_error,
+    build_http_client,
+    set_mock_attr,
+)
 
 
 class FakeResponse:
@@ -115,7 +118,11 @@ class TestRobinhoodAsyncHTTPClient:
             ]
         )
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
 
         result = await client._page_get("page-2", [{"id": 1}])
 
@@ -124,18 +131,24 @@ class TestRobinhoodAsyncHTTPClient:
 
     @pytest.mark.asyncio
     async def test_page_get_calls_error_handler_on_response_error(self) -> None:
-        error = aiohttp.ClientResponseError(None, (), status=429)
+        error = build_client_response_error(429)
         session = FakeSession(get_responses=[FakeResponse(error=error)])
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
-        client._error_status_code_handler = Mock(
-            side_effect=RuntimeError("boom")
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
+        error_handler = set_mock_attr(
+            client,
+            "_error_status_code_handler",
+            Mock(side_effect=RuntimeError("boom")),
         )
 
         with pytest.raises(RuntimeError, match="boom"):
             await client._page_get("page-2", [{"id": 1}])
 
-        client._error_status_code_handler.assert_called_once_with("page-2", 429)
+        error_handler.assert_called_once_with("page-2", 429)
 
     @pytest.mark.asyncio
     async def test_get_returns_results_from_single_page_payload(self) -> None:
@@ -145,7 +158,11 @@ class TestRobinhoodAsyncHTTPClient:
             ]
         )
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
 
         result = await client._get(
             endpoint="/quotes/",
@@ -170,7 +187,11 @@ class TestRobinhoodAsyncHTTPClient:
             ]
         )
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
 
         result = await client._get(
             endpoint="/quotes/",
@@ -187,13 +208,21 @@ class TestRobinhoodAsyncHTTPClient:
             ]
         )
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
-        client._page_get = AsyncMock(return_value=[{"id": 1}, {"id": 2}])
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
+        page_get = set_mock_attr(
+            client,
+            "_page_get",
+            AsyncMock(return_value=[{"id": 1}, {"id": 2}]),
+        )
 
         result = await client._get(endpoint="/options/")
 
         assert [{"id": 1}, {"id": 2}] == result
-        client._page_get.assert_awaited_once_with("page-2", results=[{"id": 1}])
+        page_get.assert_awaited_once_with("page-2", results=[{"id": 1}])
 
     @pytest.mark.asyncio
     async def test_post_returns_json_from_successful_response(self) -> None:
@@ -201,7 +230,11 @@ class TestRobinhoodAsyncHTTPClient:
             post_responses=[FakeResponse(payload={"id": "order-id"})]
         )
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
 
         result = await client._post(
             endpoint="/orders/",
@@ -220,11 +253,19 @@ class TestRobinhoodAsyncHTTPClient:
 
     @pytest.mark.asyncio
     async def test_post_calls_error_handler_on_response_error(self) -> None:
-        error = aiohttp.ClientResponseError(None, (), status=400)
+        error = build_client_response_error(400)
         session = FakeSession(post_responses=[FakeResponse(error=error)])
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
-        client._error_status_code_handler = Mock()
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
+        error_handler = set_mock_attr(
+            client,
+            "_error_status_code_handler",
+            Mock(),
+        )
 
         result = await client._post(
             endpoint="/orders/",
@@ -233,7 +274,7 @@ class TestRobinhoodAsyncHTTPClient:
         )
 
         assert result is None
-        client._error_status_code_handler.assert_called_once_with(
+        error_handler.assert_called_once_with(
             "/orders/",
             400,
         )
@@ -244,7 +285,11 @@ class TestRobinhoodAsyncHTTPClient:
             delete_responses=[FakeResponse(payload={"deleted": True})]
         )
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
 
         result = await client._delete(
             endpoint="/screeners/watchlist-id",
@@ -266,7 +311,11 @@ class TestRobinhoodAsyncHTTPClient:
             delete_responses=[FakeResponse(payload={}, status=204)]
         )
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
 
         result = await client._delete(endpoint="/watchlists/item-id/")
 
@@ -281,11 +330,19 @@ class TestRobinhoodAsyncHTTPClient:
 
     @pytest.mark.asyncio
     async def test_delete_calls_error_handler_on_response_error(self) -> None:
-        error = aiohttp.ClientResponseError(None, (), status=400)
+        error = build_client_response_error(400)
         session = FakeSession(delete_responses=[FakeResponse(error=error)])
         client = build_http_client(session=session)
-        client.create_client_session = AsyncMock(return_value=session)
-        client._error_status_code_handler = Mock()
+        set_mock_attr(
+            client,
+            "create_client_session",
+            AsyncMock(return_value=session),
+        )
+        error_handler = set_mock_attr(
+            client,
+            "_error_status_code_handler",
+            Mock(),
+        )
 
         result = await client._delete(
             endpoint="/screeners/watchlist-id",
@@ -293,7 +350,7 @@ class TestRobinhoodAsyncHTTPClient:
         )
 
         assert result is None
-        client._error_status_code_handler.assert_called_once_with(
+        error_handler.assert_called_once_with(
             "/screeners/watchlist-id",
             400,
         )
